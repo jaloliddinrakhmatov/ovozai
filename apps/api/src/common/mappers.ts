@@ -1,7 +1,26 @@
-import type { ApiKey, Invitation, Membership, Organization, User } from "@ovozai/database";
 import type {
+  Agent,
+  AgentVersion,
+  ApiKey,
+  Appointment,
+  Customer,
+  Invitation,
+  KnowledgeBase,
+  KnowledgeDocument,
+  Membership,
+  Organization,
+  User,
+} from "@ovozai/database";
+import type {
+  AgentConfig,
+  AgentDto,
+  AgentVersionDto,
   ApiKeyDto,
+  AppointmentDto,
+  CustomerDto,
   InvitationDto,
+  KnowledgeBaseDto,
+  KnowledgeDocumentDto,
   MembershipDto,
   MembershipWithUserDto,
   OrganizationDto,
@@ -72,5 +91,96 @@ export function toApiKeyDto(key: ApiKey): ApiKeyDto {
     lastUsedAt: iso(key.lastUsedAt),
     expiresAt: iso(key.expiresAt),
     createdAt: key.createdAt.toISOString(),
+  };
+}
+
+export function toAgentDto(agent: Agent): AgentDto {
+  return {
+    id: agent.id,
+    organizationId: agent.organizationId,
+    name: agent.name,
+    status: agent.status,
+    defaultLanguage: agent.defaultLanguage,
+    systemPrompt: agent.systemPrompt ?? null,
+    voiceId: agent.voiceId ?? null,
+    greeting: agent.greeting ?? null,
+    transferNumber: agent.transferNumber ?? null,
+    config: (agent.config ?? null) as AgentConfig | null,
+    createdAt: agent.createdAt.toISOString(),
+    updatedAt: agent.updatedAt.toISOString(),
+  };
+}
+
+export function toAgentVersionDto(version: AgentVersion): AgentVersionDto {
+  return {
+    id: version.id,
+    agentId: version.agentId,
+    version: version.version,
+    config: version.config as AgentConfig,
+    publishedAt: version.publishedAt.toISOString(),
+  };
+}
+
+export function toKnowledgeBaseDto(kb: KnowledgeBase): KnowledgeBaseDto {
+  return {
+    id: kb.id,
+    organizationId: kb.organizationId,
+    agentId: kb.agentId ?? null,
+    name: kb.name,
+    status: kb.status,
+    createdAt: kb.createdAt.toISOString(),
+    updatedAt: kb.updatedAt.toISOString(),
+  };
+}
+
+export function toKnowledgeDocumentDto(
+  doc: KnowledgeDocument,
+  chunkCount = 0,
+): KnowledgeDocumentDto {
+  return {
+    id: doc.id,
+    knowledgeBaseId: doc.knowledgeBaseId,
+    organizationId: doc.organizationId,
+    title: doc.title,
+    sourceType: doc.sourceType,
+    status: doc.status,
+    bytes: doc.bytes ?? null,
+    chunkCount,
+    error: doc.error ?? null,
+    createdAt: doc.createdAt.toISOString(),
+    updatedAt: doc.updatedAt.toISOString(),
+  };
+}
+
+export function toCustomerDto(customer: Customer): CustomerDto {
+  return {
+    id: customer.id,
+    organizationId: customer.organizationId,
+    phoneE164: customer.phoneE164,
+    name: customer.name ?? null,
+    email: customer.email ?? null,
+    locale: customer.locale,
+    notes: customer.notes ?? null,
+    tags: customer.tags,
+    lastContactedAt: iso(customer.lastContactedAt),
+    createdAt: customer.createdAt.toISOString(),
+    updatedAt: customer.updatedAt.toISOString(),
+  };
+}
+
+export function toAppointmentDto(appointment: Appointment): AppointmentDto {
+  return {
+    id: appointment.id,
+    organizationId: appointment.organizationId,
+    customerId: appointment.customerId,
+    agentId: appointment.agentId ?? null,
+    title: appointment.title,
+    notes: appointment.notes ?? null,
+    startsAt: appointment.startsAt.toISOString(),
+    endsAt: iso(appointment.endsAt),
+    status: appointment.status,
+    externalCalendarId: appointment.externalCalendarId ?? null,
+    createdAt: appointment.createdAt.toISOString(),
+    updatedAt: appointment.updatedAt.toISOString(),
   };
 }

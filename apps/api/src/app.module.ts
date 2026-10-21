@@ -13,6 +13,10 @@ import { AuthModule } from "./auth/auth.module";
 import { OrganizationsModule } from "./organizations/organizations.module";
 import { MembershipsModule } from "./memberships/memberships.module";
 import { ApiKeysModule } from "./api-keys/api-keys.module";
+import { AgentsModule } from "./agents/agents.module";
+import { KnowledgeModule } from "./knowledge/knowledge.module";
+import { CustomersModule } from "./customers/customers.module";
+import { AppointmentsModule } from "./appointments/appointments.module";
 
 @Module({
   imports: [
@@ -31,6 +35,10 @@ import { ApiKeysModule } from "./api-keys/api-keys.module";
     OrganizationsModule,
     MembershipsModule,
     ApiKeysModule,
+    AgentsModule,
+    KnowledgeModule,
+    CustomersModule,
+    AppointmentsModule,
     HealthModule,
   ],
   providers: [

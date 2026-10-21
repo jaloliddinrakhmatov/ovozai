@@ -4,10 +4,12 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 2 complete — authentication & multi-tenant core (JWT auth with rotating
-refresh tokens, organizations, memberships + invitations, RBAC, API keys, audit log, and an
-authenticated dashboard shell) on top of the Phase 1 foundation. Voice calling, billing, and
-AI agents arrive in later phases. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Status:** Phase 3 complete — AI agents (config + versioning), a knowledge base
+(document ingestion → chunking → embeddings → retrieval, with embedding jobs run by the
+`jobs-worker`), customers, and appointments, on top of the Phase 1–2 foundation
+(auth, multi-tenancy, RBAC, dashboard). Voice calling, telephony, and billing arrive in
+later phases. See [`docs/ROADMAP.md`](docs/ROADMAP.md). Note: knowledge-document ingestion
+requires the `jobs-worker` and Redis running (`pnpm dev` starts all apps).
 
 ---
 

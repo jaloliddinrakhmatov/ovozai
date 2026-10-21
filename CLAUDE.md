@@ -10,10 +10,10 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 2 complete** (auth + multi-tenant core) — **Phase 3 is next and gated:
-do not start it without explicit approval.** Do not build AI agents, the knowledge base, voice
-calling, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`. Full design is in
-`docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
+Current stage: **Phase 3 complete** (AI agents + knowledge base; also Phases 1–2) — **Phase 4
+(voice MVP) is next and gated: do not start it without explicit approval.** Do not build voice
+calling, telephony, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`. Full design
+is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
 
 ## Toolchain & commands
 
@@ -100,6 +100,19 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   deny-by-default, hierarchy-aware). Errors are RFC 9457 problem+json via `ProblemDetailsFilter`;
   validate input with `new ZodValidationPipe(schema)` against `@ovozai/contracts`. Redis-backed
   rate-limit + session denylist are best-effort (fail open) so the API still boots without Redis.
+- **Knowledge-base embeddings (Phase 3).** Stored as `Float[]` with app-side **exact cosine**
+  retrieval (see `KnowledgeService.query`), not pgvector — pgvector/HNSW is the Phase-7 scale
+  upgrade. The embedding provider is pluggable (`@ovozai/integrations` `createEmbeddingProvider`);
+  the default is a **local deterministic lexical embedder** (no API key). The **API and the
+  jobs-worker must share the `EMBEDDING_*` env** so query and chunk vectors use the same model
+  (retrieval filters chunks by `embeddingModel`). Document ingestion is async: the API creates
+  the doc `PENDING` and enqueues a BullMQ job; **`apps/jobs-worker` must be running** for it to
+  become `READY` (it chunks → embeds → stores chunks; retries with backoff; terminal `FAILED`).
+- **Tenant-scoped models now include** Agent, AgentVersion, KnowledgeBase, KnowledgeDocument,
+  KnowledgeChunk, Customer, Appointment (see `tenant.extension.ts`). Same rule: on these, use
+  `findFirst`/`updateMany`/`deleteMany` via `prisma.tenant`, never `findUnique`/`update`/`delete`.
+  The jobs-worker runs outside any request, so it uses the **unscoped base client with an
+  explicit `organizationId`** from the job payload.
 
 ## Verifying a change
 

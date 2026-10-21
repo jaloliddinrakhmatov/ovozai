@@ -9,3 +9,8 @@ export * from "./organization";
 export * from "./membership";
 export * from "./auth";
 export * from "./api-key";
+export * from "./agent";
+export * from "./knowledge";
+export * from "./customer";
+export * from "./appointment";
+export * from "./jobs";

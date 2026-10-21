@@ -54,4 +54,28 @@ export const API_ROUTES = {
     root: `${API_BASE_PATH}/api-keys`,
     byId: (id: string): string => `${API_BASE_PATH}/api-keys/${id}`,
   },
+  agents: {
+    root: `${API_BASE_PATH}/agents`,
+    byId: (id: string): string => `${API_BASE_PATH}/agents/${id}`,
+    publish: (id: string): string => `${API_BASE_PATH}/agents/${id}/publish`,
+    versions: (id: string): string => `${API_BASE_PATH}/agents/${id}/versions`,
+    restoreVersion: (id: string, version: number): string =>
+      `${API_BASE_PATH}/agents/${id}/versions/${version}/restore`,
+  },
+  knowledgeBases: {
+    root: `${API_BASE_PATH}/knowledge-bases`,
+    byId: (id: string): string => `${API_BASE_PATH}/knowledge-bases/${id}`,
+    documents: (id: string): string => `${API_BASE_PATH}/knowledge-bases/${id}/documents`,
+    document: (id: string, docId: string): string =>
+      `${API_BASE_PATH}/knowledge-bases/${id}/documents/${docId}`,
+    query: (id: string): string => `${API_BASE_PATH}/knowledge-bases/${id}/query`,
+  },
+  customers: {
+    root: `${API_BASE_PATH}/customers`,
+    byId: (id: string): string => `${API_BASE_PATH}/customers/${id}`,
+  },
+  appointments: {
+    root: `${API_BASE_PATH}/appointments`,
+    byId: (id: string): string => `${API_BASE_PATH}/appointments/${id}`,
+  },
 } as const;

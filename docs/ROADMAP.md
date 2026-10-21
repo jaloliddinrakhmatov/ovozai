@@ -1,6 +1,6 @@
 # OvozAI — Delivery Roadmap
 
-> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 2 — Authentication & multi-tenant core (complete) → Phase 3 next**
+> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 3 — AI agents & knowledge base (complete) → Phase 4 next**
 
 This roadmap sequences OvozAI from an empty repository to a hardened, compliant, production voice-receptionist platform. It is written for a **small team**: each phase delivers a **vertical slice** that is demonstrable end-to-end, keeps module boundaries clean so later phases plug in cleanly, and treats Uzbek speech quality and data privacy as early, continuous concerns rather than end-of-project surprises.
 
@@ -30,8 +30,8 @@ Read alongside:
 | Phase | Theme | Status | Primary outcome |
 | --- | --- | --- | --- |
 | 1 | Development foundation | ✅ Complete | Monorepo, apps, DB wiring, health check, CI, tests — a clean runway |
-| **2** | **Auth + multi-tenant core** | **✅ Complete** | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
-| 3 | AI agents + knowledge base | Planned | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
+| 2 | Auth + multi-tenant core | ✅ Complete | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
+| **3** | **AI agents + knowledge base** | **✅ Complete** | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
 | 4 | Voice MVP | Planned | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
 | 5 | Telephony productionization | Planned | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
 | 6 | Billing + integrations | Planned | Plans/subscriptions/usage/payments, calendars/CRM, notifications |
@@ -109,7 +109,15 @@ Turn the skeleton into a real multi-tenant SaaS shell: users can sign up, create
 
 ---
 
-## Phase 3 — AI Agent Management & Knowledge Base
+## Phase 3 — AI Agent Management & Knowledge Base · **COMPLETE (2026-10-22)**
+
+> Delivered and verified end-to-end (29-check live smoke: agent versioning/rollback,
+> async ingestion via the jobs-worker, UZ/RU/EN retrieval, customers, appointments,
+> tenant isolation). **ADR — embeddings:** stored as `Float[]` with app-side exact
+> cosine retrieval (not pgvector; that is the Phase-7 scale upgrade). The embedding
+> provider is pluggable (`packages/integrations`) with a local deterministic lexical
+> embedder as the no-API-key default. Phase-3 document ingestion covers inline
+> TEXT/FAQ; UPLOAD/URL land with object storage + SSRF handling in a later phase.
 
 ### Goal
 
@@ -117,14 +125,14 @@ Let a business define *what the agent knows and how it behaves* — before it ca
 
 ### Scope & Deliverables
 
-- [ ] `agents` module — AI agent configuration (persona, languages, behaviour) with **versioned** definitions
-- [ ] `knowledge-base` module — document upload, **chunking**, **embedding** generation, **retrieval** query API
-- [ ] Embedding generation runs as **BullMQ jobs** in `jobs-worker` (async, retryable)
-- [ ] LLM/embedding access through `packages/integrations` provider-agnostic interfaces
-- [ ] `customers` module — end-customer records per tenant
-- [ ] `appointments` module — create/reschedule/cancel, status lifecycle
-- [ ] Dashboard screens to manage agents, upload knowledge documents (with ingestion status), and view customers/appointments
-- [ ] Retrieval quality smoke tests over seed knowledge content
+- [x] `agents` module — AI agent configuration (persona, languages, behaviour) with **versioned** definitions (publish/list/restore)
+- [x] `knowledge-base` module — document ingestion (TEXT/FAQ), **chunking**, **embedding** generation, **retrieval** query API
+- [x] Embedding generation runs as **BullMQ jobs** in `jobs-worker` (async, retryable with exponential backoff; terminal FAILED state)
+- [x] Embedding access through `packages/integrations` provider-agnostic interface (local lexical default; OpenAI-compatible HTTP provider)
+- [x] `customers` module — end-customer records per tenant (search by name/phone/email)
+- [x] `appointments` module — create/reschedule/cancel, status lifecycle
+- [x] Dashboard screens to manage agents, upload knowledge documents (with live ingestion status), and view customers/appointments
+- [x] Retrieval quality smoke tests over seed knowledge content (unit: UZ/RU/EN relevance; live: end-to-end)
 
 ### Exit Criteria
 

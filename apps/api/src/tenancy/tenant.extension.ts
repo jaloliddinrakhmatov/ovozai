@@ -16,8 +16,24 @@ import { currentOrganizationId } from "./tenant-context";
  * the scoped set and pass through untouched. The set grows as later phases add
  * tenant-scoped tables (Agent, Call, …).
  */
-const TENANT_SCOPED = new Set<string>(["ApiKey", "Invitation"]);
-const SOFT_DELETE_MODELS = new Set<string>(["ApiKey"]);
+const TENANT_SCOPED = new Set<string>([
+  "ApiKey",
+  "Invitation",
+  "Agent",
+  "AgentVersion",
+  "KnowledgeBase",
+  "KnowledgeDocument",
+  "KnowledgeChunk",
+  "Customer",
+  "Appointment",
+]);
+const SOFT_DELETE_MODELS = new Set<string>([
+  "ApiKey",
+  "Agent",
+  "KnowledgeBase",
+  "KnowledgeDocument",
+  "Customer",
+]);
 
 const WHERE_OPS = new Set<string>([
   "findFirst",

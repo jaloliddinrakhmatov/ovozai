@@ -33,6 +33,14 @@ const envSchema = z
     AUTH_RATE_LIMIT_MAX: z.coerce.number().int().positive().default(10),
     /** Rate-limit window (seconds). */
     AUTH_RATE_LIMIT_WINDOW_SECONDS: z.coerce.number().int().positive().default(60),
+
+    // --- Embeddings (knowledge base). Must match the jobs-worker config so
+    //     query vectors and chunk vectors are comparable. ---
+    EMBEDDING_PROVIDER: z.enum(["local", "openai"]).default("local"),
+    EMBEDDING_MODEL: z.string().optional(),
+    EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(256),
+    EMBEDDING_API_KEY: z.string().optional(),
+    EMBEDDING_BASE_URL: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {

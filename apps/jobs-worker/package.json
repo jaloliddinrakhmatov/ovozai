@@ -14,12 +14,19 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
+    "@ovozai/contracts": "workspace:*",
+    "@ovozai/database": "workspace:*",
+    "@ovozai/integrations": "workspace:*",
+    "@prisma/adapter-pg": "catalog:",
     "bullmq": "catalog:",
-    "ioredis": "catalog:"
+    "dotenv": "catalog:",
+    "ioredis": "catalog:",
+    "pg": "catalog:"
   },
   "devDependencies": {
     "@ovozai/config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
     "eslint": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",

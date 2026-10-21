@@ -83,6 +83,53 @@ enum AuditActorType {
   SYSTEM
 }
 
+/// Lifecycle state of a configured AI agent.
+enum AgentStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  ARCHIVED
+}
+
+/// Languages the platform supports for agents, calls, and content.
+enum Language {
+  UZ
+  RU
+  EN
+}
+
+/// Lifecycle state of a knowledge base.
+enum KnowledgeBaseStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// Ingestion state of a knowledge document.
+enum KnowledgeDocumentStatus {
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
+/// Origin of a knowledge document. Phase 3 ingests TEXT/FAQ inline content;
+/// UPLOAD/URL arrive with object storage + SSRF handling in a later phase.
+enum KnowledgeSourceType {
+  UPLOAD
+  URL
+  TEXT
+  FAQ
+}
+
+/// Lifecycle state of an appointment.
+enum AppointmentStatus {
+  PENDING
+  CONFIRMED
+  CANCELED
+  COMPLETED
+  NO_SHOW
+}
+
 // ---------------------------------------------------------------------------
 // Identity & tenancy core (Phase 1)
 // ---------------------------------------------------------------------------
@@ -99,11 +146,18 @@ model Organization {
   updatedAt DateTime           @updatedAt @map("updated_at")
   deletedAt DateTime?          @map("deleted_at")
 
-  memberships Membership[]
-  sessions    Session[]
-  invitations Invitation[]
-  apiKeys     ApiKey[]
-  auditLogs   AuditLog[]
+  memberships        Membership[]
+  sessions           Session[]
+  invitations        Invitation[]
+  apiKeys            ApiKey[]
+  auditLogs          AuditLog[]
+  agents             Agent[]
+  agentVersions      AgentVersion[]
+  knowledgeBases     KnowledgeBase[]
+  knowledgeDocuments KnowledgeDocument[]
+  knowledgeChunks    KnowledgeChunk[]
+  customers          Customer[]
+  appointments       Appointment[]
 
   @@map("organizations")
 }
@@ -261,4 +315,170 @@ model AuditLog {
   @@index([organizationId, action])
   @@index([actorId])
   @@map("audit_logs")
+}
+
+// ---------------------------------------------------------------------------
+// AI agents & knowledge base (Phase 3)
+// ---------------------------------------------------------------------------
+
+/// A configured AI voice receptionist. `config` holds model params, tool
+/// toggles, business hours, etc. Published snapshots live in AgentVersion.
+model Agent {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  name           String
+  status         AgentStatus @default(DRAFT)
+  defaultLanguage Language   @default(UZ) @map("default_language")
+  systemPrompt   String?     @map("system_prompt")
+  voiceId        String?     @map("voice_id")
+  greeting       String?
+  transferNumber String?     @map("transfer_number")
+  config         Json?
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+  deletedAt      DateTime?   @map("deleted_at")
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions       AgentVersion[]
+  knowledgeBases KnowledgeBase[]
+  appointments   Appointment[]
+
+  @@index([organizationId])
+  @@map("agents")
+}
+
+/// An immutable, published snapshot of an agent's configuration. Append-only.
+model AgentVersion {
+  id             String   @id @default(uuid())
+  agentId        String   @map("agent_id")
+  organizationId String   @map("organization_id")
+  version        Int
+  config         Json
+  publishedAt    DateTime @default(now()) @map("published_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  agent        Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, version])
+  @@index([organizationId])
+  @@map("agent_versions")
+}
+
+/// A collection of documents an agent answers from.
+model KnowledgeBase {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  agentId        String?             @map("agent_id")
+  name           String
+  status         KnowledgeBaseStatus @default(ACTIVE)
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+  deletedAt      DateTime?           @map("deleted_at")
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent?              @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  documents    KnowledgeDocument[]
+
+  @@index([organizationId])
+  @@map("knowledge_bases")
+}
+
+/// A source document ingested into a knowledge base. For TEXT/FAQ sources the
+/// raw text is stored inline in `content` (Phase 3); UPLOAD/URL use object
+/// storage in a later phase. `organizationId` is denormalized for tenant scoping.
+model KnowledgeDocument {
+  id              String                  @id @default(uuid())
+  knowledgeBaseId String                  @map("knowledge_base_id")
+  organizationId  String                  @map("organization_id")
+  title           String
+  sourceType      KnowledgeSourceType     @map("source_type")
+  sourceUri       String?                 @map("source_uri")
+  content         String?
+  status          KnowledgeDocumentStatus @default(PENDING)
+  bytes           Int?
+  checksum        String?
+  error           String?
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  deletedAt       DateTime?               @map("deleted_at")
+
+  knowledgeBase KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  organization  Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chunks        KnowledgeChunk[]
+
+  @@index([organizationId])
+  @@index([knowledgeBaseId])
+  @@map("knowledge_documents")
+}
+
+/// A retrievable fragment of a document. `embedding` is the dense vector (stored
+/// as a float array; app-side cosine retrieval — see CLAUDE.md). Append-only.
+model KnowledgeChunk {
+  id              String   @id @default(uuid())
+  documentId      String   @map("document_id")
+  knowledgeBaseId String   @map("knowledge_base_id")
+  organizationId  String   @map("organization_id")
+  ordinal         Int
+  content         String
+  tokenCount      Int      @map("token_count")
+  embedding       Float[]
+  embeddingModel  String   @map("embedding_model")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  document     KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([knowledgeBaseId])
+  @@index([documentId])
+  @@map("knowledge_chunks")
+}
+
+/// A caller/contact known to an organization. PII.
+model Customer {
+  id              String    @id @default(uuid())
+  organizationId  String    @map("organization_id")
+  phoneE164       String    @map("phone_e164")
+  name            String?
+  email           String?
+  locale          String    @default("uz")
+  notes           String?
+  tags            String[]  @default([])
+  lastContactedAt DateTime? @map("last_contacted_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  deletedAt       DateTime? @map("deleted_at")
+
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  appointments Appointment[]
+
+  @@index([organizationId])
+  @@index([organizationId, phoneE164])
+  @@map("customers")
+}
+
+/// A booking created by an agent or by staff.
+model Appointment {
+  id                 String            @id @default(uuid())
+  organizationId     String            @map("organization_id")
+  customerId         String            @map("customer_id")
+  agentId            String?           @map("agent_id")
+  title              String
+  notes              String?
+  startsAt           DateTime          @map("starts_at")
+  endsAt             DateTime?         @map("ends_at")
+  status             AppointmentStatus @default(PENDING)
+  externalCalendarId String?           @map("external_calendar_id")
+  createdAt          DateTime          @default(now()) @map("created_at")
+  updatedAt          DateTime          @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  customer     Customer     @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, startsAt])
+  @@index([customerId])
+  @@map("appointments")
 }

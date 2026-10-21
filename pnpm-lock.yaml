@@ -370,12 +370,18 @@ importers:
       '@ovozai/database':
         specifier: workspace:*
         version: link:../../packages/database
+      '@ovozai/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
       '@prisma/adapter-pg':
         specifier: 'catalog:'
         version: 7.10.1
       argon2:
         specifier: 'catalog:'
         version: 0.45.1
+      bullmq:
+        specifier: 'catalog:'
+        version: 6.4.0(ioredis@6.0.0)(pg@8.23.1)
       helmet:
         specifier: 'catalog:'
         version: 8.3.0
@@ -434,12 +440,30 @@ importers:
 
   apps/jobs-worker:
     dependencies:
+      '@ovozai/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
+      '@ovozai/database':
+        specifier: workspace:*
+        version: link:../../packages/database
+      '@ovozai/integrations':
+        specifier: workspace:*
+        version: link:../../packages/integrations
+      '@prisma/adapter-pg':
+        specifier: 'catalog:'
+        version: 7.10.1
       bullmq:
         specifier: 'catalog:'
         version: 6.4.0(ioredis@6.0.0)(pg@8.23.1)
+      dotenv:
+        specifier: 'catalog:'
+        version: 18.0.8
       ioredis:
         specifier: 'catalog:'
         version: 6.0.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.23.1
     devDependencies:
       '@ovozai/config':
         specifier: workspace:*
@@ -447,6 +471,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.23.1
       eslint:
         specifier: 'catalog:'
         version: 10.13.0(jiti@2.7.0)

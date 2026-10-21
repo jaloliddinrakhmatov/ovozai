@@ -91,6 +91,18 @@ export const API_ROUTES = {
     transcript: (id: string): string => `${API_BASE_PATH}/calls/${id}/transcript`,
     recording: (id: string): string => `${API_BASE_PATH}/calls/${id}/recording`,
   },
+  phoneNumbers: {
+    root: `${API_BASE_PATH}/phone-numbers`,
+    byId: (id: string): string => `${API_BASE_PATH}/phone-numbers/${id}`,
+  },
+  webhooks: {
+    endpoints: `${API_BASE_PATH}/webhooks/endpoints`,
+    endpointById: (id: string): string => `${API_BASE_PATH}/webhooks/endpoints/${id}`,
+    deliveries: `${API_BASE_PATH}/webhooks/deliveries`,
+  },
+  wer: {
+    summary: `${API_BASE_PATH}/wer/summary`,
+  },
 } as const;
 
 /** Internal voice-worker ↔ API routes (service-token + HMAC authenticated). */
@@ -104,4 +116,6 @@ export const INTERNAL_ROUTES = {
     `${INTERNAL_BASE_PATH}/calls/${id}/tools/knowledge-retrieval`,
   toolBookAppointment: (id: string): string =>
     `${INTERNAL_BASE_PATH}/calls/${id}/tools/book-appointment`,
+  toolTransfer: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/tools/transfer`,
+  recordWer: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/wer`,
 } as const;

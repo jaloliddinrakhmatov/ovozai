@@ -9,7 +9,7 @@
  * run, set `VOICE_DEV_CALL_AGENT_ID` to drive one simulated call (scripted caller
  * turns) through the real pipeline and report it to the API.
  */
-import { createVoiceProviders } from "@ovozai/integrations";
+import { createStorageProvider, createVoiceProviders } from "@ovozai/integrations";
 import { loadVoiceWorkerConfig, loadVoiceWorkerEnv } from "./config";
 import { InternalApiClient } from "./internal-client";
 import { CallSession } from "./call-session";
@@ -23,21 +23,32 @@ const providers = createVoiceProviders({
   apiKey: config.providerApiKey,
   baseUrl: config.providerBaseUrl,
 });
+const storage = createStorageProvider({
+  provider: process.env.STORAGE_PROVIDER === "s3" ? "s3" : "local",
+  baseDir: process.env.STORAGE_LOCAL_DIR,
+  bucket: process.env.STORAGE_S3_BUCKET,
+  region: process.env.STORAGE_S3_REGION,
+  endpoint: process.env.STORAGE_S3_ENDPOINT,
+});
 const internal = new InternalApiClient({
   baseUrl: config.apiBaseUrl,
   serviceToken: config.serviceToken,
   hmacSecret: config.hmacSecret,
 });
 
-/** Scripted caller turns for a dev simulated call (UZ/RU/EN + barge-in + goodbye). */
-const DEMO_SCRIPT: SimulatedCallerUtterance[] = [
-  { text: "What are your opening hours?", language: "en" },
-  { text: "Режим работы в пятницу вечером?", language: "ru" },
-  { text: "Ish vaqti juma kuni qanday?", language: "uz", bargeInAfterChunks: 1 },
-  { text: "Thanks, goodbye", language: "en" },
-];
+/** Scripted caller turns for dev simulated calls. */
+const DEMO_SCRIPTS: Record<string, SimulatedCallerUtterance[]> = {
+  qa: [
+    { text: "What are your opening hours?", language: "en" },
+    { text: "Режим работы в пятницу вечером?", language: "ru" },
+    { text: "Ish vaqti juma kuni qanday?", language: "uz", bargeInAfterChunks: 1 },
+    { text: "Thanks, goodbye", language: "en" },
+  ],
+  transfer: [{ text: "Please connect me to a human operator", language: "en" }],
+};
 
-async function runDevCall(agentId: string): Promise<void> {
+async function runDevCall(agentId: string, mode: string): Promise<void> {
+  const script = DEMO_SCRIPTS[mode] ?? DEMO_SCRIPTS.qa!;
   const created = await internal.createCall({
     agentId,
     direction: "INBOUND",
@@ -50,7 +61,8 @@ async function runDevCall(agentId: string): Promise<void> {
     agent: created.agent,
     providers,
     internal,
-    transport: new SimulatedTransport(DEMO_SCRIPT),
+    transport: new SimulatedTransport(script),
+    storage,
     logger: (message) => console.warn("[voice-worker]", message),
   });
   await session.run();
@@ -65,8 +77,9 @@ async function main(): Promise<void> {
 
   const devAgentId = process.env.VOICE_DEV_CALL_AGENT_ID;
   if (devAgentId) {
-    console.info("[voice-worker] running simulated dev call for agent %s", devAgentId);
-    await runDevCall(devAgentId);
+    const mode = process.env.VOICE_DEV_CALL_MODE ?? "qa";
+    console.info("[voice-worker] running simulated dev call (mode=%s) for agent %s", mode, devAgentId);
+    await runDevCall(devAgentId, mode);
     process.exit(0);
   }
 

@@ -47,6 +47,13 @@ const envSchema = z
     INTERNAL_HMAC_SECRET: z.string().default("dev-insecure-hmac-secret-change-me-0123456789"),
     /** Max age (seconds) of a signed internal request before it is rejected. */
     INTERNAL_SIGNATURE_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(300),
+
+    // --- Object storage for recordings (Phase 5). Must match the voice-worker. ---
+    STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
+    STORAGE_LOCAL_DIR: z.string().optional(),
+    STORAGE_S3_BUCKET: z.string().optional(),
+    STORAGE_S3_REGION: z.string().optional(),
+    STORAGE_S3_ENDPOINT: z.string().optional(),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {

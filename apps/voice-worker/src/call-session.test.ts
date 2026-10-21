@@ -7,7 +7,10 @@ import type {
   CallUpdateReport,
   KnowledgeRetrievalToolRequest,
   KnowledgeRetrievalToolResponse,
+  RecordWerRequest,
   TranscriptTurnReport,
+  TransferCallToolRequest,
+  TransferCallToolResponse,
   UsageReport,
   VoiceAgentConfig,
 } from "@ovozai/contracts";
@@ -67,6 +70,17 @@ class FakeInternalClient implements VoiceInternalClient {
       status: "PENDING",
       startsAt: req.startsAt,
     };
+  }
+  transfers: TransferCallToolRequest[] = [];
+  async transferCall(
+    _callId: string,
+    req: TransferCallToolRequest,
+  ): Promise<TransferCallToolResponse> {
+    this.transfers.push(req);
+    return { status: "transferred", target: req.target, mode: req.mode };
+  }
+  async recordWer(_callId: string, _req: RecordWerRequest): Promise<{ id: string }> {
+    return { id: "wer" };
   }
 }
 
@@ -128,5 +142,26 @@ describe("CallSession (simulated call through the real local pipeline)", () => {
     expect(internal.updates.some((u) => u.status === "IN_PROGRESS")).toBe(true);
     expect(internal.updates.some((u) => u.status === "COMPLETED")).toBe(true);
     expect(internal.usages.some((u) => u.metric === "CALL_MINUTES")).toBe(true);
+  });
+
+  it("transfers the call to a human when the caller asks for one", async () => {
+    const internal = new FakeInternalClient();
+    const transport = new SimulatedTransport([
+      { text: "Please connect me to a human operator", language: "en" },
+    ]);
+    const session = new CallSession({
+      callId: "call-2",
+      organizationId: "org-1",
+      agent: { ...AGENT, transferNumber: "+998901112233" },
+      providers: createVoiceProviders({ provider: "local" }),
+      internal,
+      transport,
+    });
+
+    await session.run();
+
+    expect(internal.transfers).toHaveLength(1);
+    expect(internal.transfers[0]!.target).toBe("+998901112233");
+    expect(internal.updates.some((u) => u.status === "TRANSFERRED")).toBe(true);
   });
 });

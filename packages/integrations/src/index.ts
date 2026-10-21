@@ -8,3 +8,5 @@ export * from "./wer";
 export * from "./providers-local";
 export * from "./providers-openai";
 export * from "./voice-providers";
+export * from "./stt-fallback";
+export * from "./storage";

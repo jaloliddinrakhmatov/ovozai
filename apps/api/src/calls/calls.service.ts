@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common";
+import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@ovozai/database";
+import type { StorageProvider } from "@ovozai/integrations";
 import type {
   CallDto,
   CallEventDto,
@@ -11,6 +12,7 @@ import type {
 import { Problems } from "../common/problem.exception";
 import { toCallDto, toCallEventDto, toTranscriptDto } from "../common/mappers";
 import { PrismaService } from "../prisma/prisma.service";
+import { STORAGE_PROVIDER } from "./storage.provider";
 
 interface Page<T> {
   data: T[];
@@ -19,7 +21,10 @@ interface Page<T> {
 
 @Injectable()
 export class CallsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Inject(STORAGE_PROVIDER) private readonly storage: StorageProvider,
+  ) {}
 
   async list(query: CallListQuery): Promise<Page<CallDto>> {
     const where: Prisma.CallWhereInput = {};
@@ -83,11 +88,11 @@ export class CallsService {
 
   async getRecording(id: string): Promise<RecordingUrlResponse> {
     const call = await this.load(id);
-    // Object storage lands in a later phase; expose metadata only for now.
     if (!call.recordingObjectKey) {
       return { url: null, expiresAt: null };
     }
-    return { url: null, expiresAt: null };
+    const url = await this.storage.getUrl(call.recordingObjectKey, 900);
+    return { url, expiresAt: url ? new Date(Date.now() + 900_000).toISOString() : null };
   }
 
   private async load(id: string) {

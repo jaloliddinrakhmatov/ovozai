@@ -1,5 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { AudioChunk, LlmMessage, LlmProvider, LlmTool, SttProvider, TtsProvider } from "@ovozai/integrations";
+import type {
+  AudioChunk,
+  LlmMessage,
+  LlmProvider,
+  LlmTool,
+  SttProvider,
+  StorageProvider,
+  TtsProvider,
+} from "@ovozai/integrations";
 import type { Language, TranscriptRole, VoiceAgentConfig } from "@ovozai/contracts";
 import type { AudioTransport, PlaybackResult } from "./transport";
 import type { VoiceInternalClient } from "./internal-client";
@@ -13,6 +21,7 @@ export interface CallSessionDeps {
   providers: { stt: SttProvider; llm: LlmProvider; tts: TtsProvider };
   internal: VoiceInternalClient;
   transport: AudioTransport;
+  storage?: StorageProvider;
   llmModel?: string;
   logger?: (message: string) => void;
 }
@@ -42,6 +51,18 @@ const TOOL_SCHEMAS: LlmTool[] = [
         notes: { type: "string" },
       },
       required: ["title", "startsAt"],
+    },
+  },
+  {
+    name: "transfer_call",
+    description: "Transfer the caller to a human (warm or cold handoff).",
+    parameters: {
+      type: "object",
+      properties: {
+        target: { type: "string" },
+        mode: { type: "string", enum: ["warm", "cold"] },
+        reason: { type: "string" },
+      },
     },
   },
   {
@@ -84,6 +105,7 @@ interface ThinkResult {
   kind: "speak" | "end";
   text: string;
   reason?: string;
+  endStatus?: "COMPLETED" | "TRANSFERRED";
 }
 
 /**
@@ -99,7 +121,9 @@ export class CallSession {
   private turnCount = 0;
   private llmTokenEstimate = 0;
   private endedReason = "caller_hangup";
-  private readonly endStatus: "COMPLETED" | "TRANSFERRED" | "FAILED" = "COMPLETED";
+  private endStatus: "COMPLETED" | "TRANSFERRED" | "FAILED" = "COMPLETED";
+  private recordingConsent = false;
+  private readonly transcriptLog: string[] = [];
 
   constructor(private readonly deps: CallSessionDeps) {
     this.messages.push({ role: "system", content: deps.agent.systemPrompt });
@@ -116,8 +140,13 @@ export class CallSession {
       .catch((e) => this.warn(e));
     await this.event("call.started", { agentId: agent.agentId });
 
-    // Greeting + recording-consent announcement (played fully).
+    // Greeting + recording-consent announcement (played fully). A played consent
+    // announcement is the lawful basis for recording (two-party consent).
     this.state = "greeting";
+    this.recordingConsent = Boolean(agent.consentAnnouncement);
+    if (this.recordingConsent) {
+      await this.event("consent.captured", { method: "announcement" });
+    }
     const greeting = [agent.consentAnnouncement, agent.greeting].filter(Boolean).join(" ");
     await this.reportTurn("AGENT", greeting, 0, agent.defaultLanguage);
     await this.speak(greeting);
@@ -150,6 +179,7 @@ export class CallSession {
 
       if (result.kind === "end") {
         this.endedReason = result.reason ?? "agent_ended";
+        this.endStatus = result.endStatus ?? "COMPLETED";
         break;
       }
       this.state = "listening";
@@ -204,7 +234,12 @@ export class CallSession {
         await this.event("tool.invoked", { name: toolName });
         const outcome = await this.executeTool(toolName, safeJson(toolArgs));
         if (outcome.end) {
-          return { kind: "end", text: outcome.text, reason: "agent_ended" };
+          return {
+            kind: "end",
+            text: outcome.text,
+            reason: outcome.endStatus === "TRANSFERRED" ? "transferred" : "agent_ended",
+            endStatus: outcome.endStatus,
+          };
         }
         this.messages.push({ role: "assistant", content: "" });
         this.messages.push({ role: "tool", content: outcome.text, toolCallId: toolId });
@@ -219,7 +254,7 @@ export class CallSession {
   private async executeTool(
     name: string,
     args: Record<string, unknown>,
-  ): Promise<{ text: string; end?: boolean }> {
+  ): Promise<{ text: string; end?: boolean; endStatus?: "COMPLETED" | "TRANSFERRED" }> {
     const { internal, callId } = this.deps;
     switch (name) {
       case "knowledge_retrieval": {
@@ -244,8 +279,24 @@ export class CallSession {
         });
         return { text: `Your appointment is booked for ${response.startsAt}.` };
       }
+      case "transfer_call": {
+        const target =
+          this.deps.agent.transferNumber ??
+          (typeof args.target === "string" && args.target.length >= 3 ? args.target : "+000000000000");
+        const mode = args.mode === "warm" ? "warm" : "cold";
+        await this.deps.internal.transferCall(this.deps.callId, {
+          target,
+          mode,
+          reason: typeof args.reason === "string" ? args.reason : undefined,
+        });
+        return {
+          text: "Please hold while I connect you to a colleague.",
+          end: true,
+          endStatus: "TRANSFERRED",
+        };
+      }
       case "end_call":
-        return { text: "Thank you for calling. Goodbye.", end: true };
+        return { text: "Thank you for calling. Goodbye.", end: true, endStatus: "COMPLETED" };
       default:
         return { text: "I can't do that right now." };
     }
@@ -268,6 +319,7 @@ export class CallSession {
     startMs: number,
     language: Language,
   ): Promise<void> {
+    this.transcriptLog.push(`${role}: ${text}`);
     await this.deps.internal
       .appendTranscriptTurn(this.deps.callId, {
         turnId: randomUUID(),
@@ -288,12 +340,33 @@ export class CallSession {
   private async end(): Promise<void> {
     this.state = "ended";
     const durationSec = Math.max(1, Math.round((Date.now() - this.startedAt) / 1000));
+
+    // Persist the recording (consent-gated). This is a transcript-text placeholder:
+    // real call audio is captured at the LiveKit media layer (not wired here).
+    let recordingObjectKey: string | undefined;
+    if (this.deps.storage && this.recordingConsent) {
+      try {
+        const key = `org/${this.deps.organizationId}/calls/${this.deps.callId}/recording.txt`;
+        await this.deps.storage.put(
+          key,
+          new TextEncoder().encode(this.transcriptLog.join("\n")),
+          "text/plain",
+        );
+        recordingObjectKey = key;
+        await this.event("recording.stored", { key });
+      } catch (error) {
+        this.warn(error);
+      }
+    }
+
     await this.deps.internal
       .updateCall(this.deps.callId, {
         status: this.endStatus,
         endedAt: new Date().toISOString(),
         durationSec,
         endedReason: this.endedReason,
+        recordingConsent: this.recordingConsent,
+        ...(recordingObjectKey ? { recordingObjectKey } : {}),
       })
       .catch((e) => this.warn(e));
     await this.event("call.ended", {

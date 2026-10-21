@@ -19,6 +19,9 @@ import { CustomersModule } from "./customers/customers.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
 import { CallsModule } from "./calls/calls.module";
 import { InternalModule } from "./internal/internal.module";
+import { PhoneNumbersModule } from "./phone-numbers/phone-numbers.module";
+import { WebhooksModule } from "./webhooks/webhooks.module";
+import { WerModule } from "./wer/wer.module";
 
 @Module({
   imports: [
@@ -42,6 +45,9 @@ import { InternalModule } from "./internal/internal.module";
     CustomersModule,
     AppointmentsModule,
     CallsModule,
+    PhoneNumbersModule,
+    WebhooksModule,
+    WerModule,
     InternalModule,
     HealthModule,
   ],

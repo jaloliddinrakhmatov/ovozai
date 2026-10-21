@@ -165,6 +165,27 @@ enum UsageMetric {
   LLM_TOKENS
 }
 
+/// Lifecycle state of a provisioned phone number.
+enum PhoneNumberStatus {
+  ACTIVE
+  INACTIVE
+  PORTING
+  RELEASED
+}
+
+/// Lifecycle state of a tenant webhook endpoint.
+enum WebhookStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// Delivery state of a single webhook attempt record.
+enum WebhookDeliveryStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
 // ---------------------------------------------------------------------------
 // Identity & tenancy core (Phase 1)
 // ---------------------------------------------------------------------------
@@ -198,6 +219,10 @@ model Organization {
   transcripts        Transcript[]
   transcriptTurns    TranscriptTurn[]
   usageRecords       UsageRecord[]
+  phoneNumbers       PhoneNumber[]
+  webhookEndpoints   WebhookEndpoint[]
+  webhookDeliveries  WebhookDelivery[]
+  werMeasurements    WerMeasurement[]
 
   @@map("organizations")
 }
@@ -383,6 +408,7 @@ model Agent {
   knowledgeBases KnowledgeBase[]
   appointments   Appointment[]
   calls          Call[]
+  phoneNumbers   PhoneNumber[]
 
   @@index([organizationId])
   @@map("agents")
@@ -548,15 +574,20 @@ model Call {
   durationSec        Int?          @map("duration_sec")
   endedReason        String?       @map("ended_reason")
   recordingObjectKey String?       @map("recording_object_key")
+  recordingConsent   Boolean       @default(false) @map("recording_consent")
   costCents          Int?          @map("cost_cents")
+  phoneNumberId      String?       @map("phone_number_id")
+  /// E.164 target a transfer was handed off to (Phase 5).
+  transferredTo      String?       @map("transferred_to")
   /// External room/session reference (e.g. LiveKit room name).
   externalRef        String?       @map("external_ref")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
-  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  agent        Agent?        @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  customer     Customer?     @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  phoneNumber  PhoneNumber?  @relation(fields: [phoneNumberId], references: [id], onDelete: SetNull)
   events       CallEvent[]
   transcript   Transcript?
   usageRecords UsageRecord[]
@@ -641,4 +672,99 @@ model UsageRecord {
   @@index([organizationId])
   @@index([organizationId, metric, periodKey])
   @@map("usage_records")
+}
+
+// ---------------------------------------------------------------------------
+// Telephony productionization (Phase 5)
+// ---------------------------------------------------------------------------
+
+/// A provisioned telephony number routed to an agent. `provider`/`providerNumberId`
+/// reference the external telephony/SIP provider (real provisioning is deployment
+/// config; dev uses a mock provider).
+model PhoneNumber {
+  id               String            @id @default(uuid())
+  organizationId   String            @map("organization_id")
+  e164             String            @unique
+  provider         String
+  providerNumberId String?           @map("provider_number_id")
+  agentId          String?           @map("agent_id")
+  status           PhoneNumberStatus @default(ACTIVE)
+  capabilities     String[]          @default([])
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  deletedAt        DateTime?         @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  calls        Call[]
+
+  @@index([organizationId])
+  @@map("phone_numbers")
+}
+
+/// A tenant-registered destination for outbound event notifications. `secret` is
+/// stored hashed; deliveries are signed HMAC-SHA256 (docs/API.md §13).
+model WebhookEndpoint {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  url            String
+  events         String[]          @default([])
+  /// HMAC signing secret for outbound deliveries. Must be recoverable to sign,
+  /// so it is NOT a one-way hash: store encrypted at rest in production (KMS /
+  /// secretRef, see docs/SECURITY.md §5); plaintext is used only in dev.
+  secret         String            @map("hashed_secret")
+  status         WebhookStatus     @default(ACTIVE)
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  deliveries   WebhookDelivery[]
+
+  @@index([organizationId])
+  @@map("webhook_endpoints")
+}
+
+/// A single webhook delivery attempt record. Append-only.
+model WebhookDelivery {
+  id             String                @id @default(uuid())
+  organizationId String                @map("organization_id")
+  endpointId     String                @map("endpoint_id")
+  event          String
+  payload        Json
+  status         WebhookDeliveryStatus @default(PENDING)
+  attempts       Int                   @default(0)
+  responseStatus Int?                  @map("response_status")
+  lastAttemptAt  DateTime?             @map("last_attempt_at")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  updatedAt      DateTime              @updatedAt @map("updated_at")
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  endpoint     WebhookEndpoint @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([endpointId, createdAt])
+  @@map("webhook_deliveries")
+}
+
+/// A Word Error Rate measurement for a provider/language (docs/VOICE_PIPELINE.md
+/// §9), the KPI that decides Uzbek STT routing. Append-only. Phase-5 addition.
+model WerMeasurement {
+  id             String   @id @default(uuid())
+  organizationId String?  @map("organization_id")
+  provider       String
+  language       Language
+  wer            Float
+  substitutions  Int      @default(0)
+  deletions      Int      @default(0)
+  insertions     Int      @default(0)
+  referenceWords Int      @map("reference_words")
+  callId         String?  @map("call_id")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([provider, language])
+  @@map("wer_measurements")
 }

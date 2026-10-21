@@ -66,6 +66,18 @@ export class LocalRuleLlmProvider implements LlmProvider {
     }
 
     const lower = userText.toLowerCase();
+    if (/\b(human|operator|representative|manager|transfer|connect me|real person|odam|оператор|человек)\b/u.test(lower)) {
+      yield {
+        toolCall: {
+          id: "call_transfer",
+          name: "transfer_call",
+          argumentsDelta: JSON.stringify({ mode: "warm", reason: "caller requested a human" }),
+        },
+        done: false,
+      };
+      yield { done: true };
+      return;
+    }
     if (/\b(bye|goodbye|thanks|thank you|rahmat|xayr|спасибо|до свидания)\b/u.test(lower)) {
       yield {
         toolCall: {

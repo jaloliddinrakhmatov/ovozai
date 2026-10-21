@@ -11,6 +11,9 @@ const PROTECTED_ROUTES = [
   "/dashboard/customers",
   "/dashboard/appointments",
   "/dashboard/calls",
+  "/dashboard/phone-numbers",
+  "/dashboard/webhooks",
+  "/dashboard/wer",
 ];
 
 test.describe("Phase 3 dashboard routes", () => {

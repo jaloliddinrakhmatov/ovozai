@@ -9,11 +9,12 @@
  */
 
 import { Worker, type Job } from "bullmq";
-import { JOB_QUEUES, embeddingJobSchema } from "@ovozai/contracts";
+import { JOB_QUEUES, embeddingJobSchema, webhookJobSchema } from "@ovozai/contracts";
 import { getRedisConnectionOptions } from "./redis-connection";
 import { createPrismaClient, loadWorkerEnv } from "./db";
 import { createEmbedderFromEnv } from "./embedder";
 import { processEmbeddingJob } from "./embedding-processor";
+import { processWebhookJob } from "./webhook-processor";
 
 loadWorkerEnv();
 
@@ -52,11 +53,24 @@ const worker = new Worker(
   { connection: getRedisConnectionOptions(), concurrency },
 );
 
-worker.on("error", (error) => console.error("[jobs-worker] worker error:", error.message));
+worker.on("error", (error) => console.error("[jobs-worker] embedding worker error:", error.message));
 worker.on("ready", () => console.info("[jobs-worker] connected to Redis and ready for jobs"));
-worker.on("completed", (job) => console.info("[jobs-worker] job %s completed", job.id ?? "<?>"));
+worker.on("completed", (job) => console.info("[jobs-worker] embedding job %s completed", job.id ?? "<?>"));
 worker.on("failed", (job, error) =>
-  console.error("[jobs-worker] job %s failed:", job?.id ?? "<unknown>", error.message),
+  console.error("[jobs-worker] embedding job %s failed:", job?.id ?? "<unknown>", error.message),
+);
+
+const webhookWorker = new Worker(
+  JOB_QUEUES.webhook,
+  async (job: Job) => {
+    const data = webhookJobSchema.parse(job.data);
+    return processWebhookJob({ prisma }, data);
+  },
+  { connection: getRedisConnectionOptions(), concurrency },
+);
+webhookWorker.on("error", (error) => console.error("[jobs-worker] webhook worker error:", error.message));
+webhookWorker.on("failed", (job, error) =>
+  console.error("[jobs-worker] webhook job %s failed:", job?.id ?? "<unknown>", error.message),
 );
 
 let shuttingDown = false;
@@ -66,6 +80,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   console.info("[jobs-worker] received %s — shutting down", signal);
   try {
     await worker.close();
+    await webhookWorker.close();
     await prisma.$disconnect();
   } catch (error) {
     console.error("[jobs-worker] shutdown error:", error instanceof Error ? error.message : error);

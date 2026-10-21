@@ -3,6 +3,7 @@ import { z } from "zod";
 /** BullMQ queue names shared between producers (apps/api) and the jobs-worker. */
 export const JOB_QUEUES = {
   embedding: "embedding",
+  webhook: "webhook",
 } as const;
 export type JobQueue = (typeof JOB_QUEUES)[keyof typeof JOB_QUEUES];
 
@@ -16,3 +17,13 @@ export const embeddingJobSchema = z.object({
   organizationId: z.uuid(),
 });
 export type EmbeddingJob = z.infer<typeof embeddingJobSchema>;
+
+/** Stable job name within the webhook queue. */
+export const WEBHOOK_JOB_NAME = "deliver-webhook" as const;
+
+/** Payload for a webhook delivery job: deliver one pending WebhookDelivery. */
+export const webhookJobSchema = z.object({
+  deliveryId: z.uuid(),
+  organizationId: z.uuid(),
+});
+export type WebhookJob = z.infer<typeof webhookJobSchema>;

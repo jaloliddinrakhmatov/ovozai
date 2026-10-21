@@ -1,6 +1,6 @@
 import { Inject, Injectable } from "@nestjs/common";
 import { Prisma } from "@ovozai/database";
-import { cosineSimilarity, type EmbeddingProvider } from "@ovozai/integrations";
+import { computeWer, cosineSimilarity, type EmbeddingProvider } from "@ovozai/integrations";
 import type {
   BookAppointmentToolRequest,
   BookAppointmentToolResponse,
@@ -12,8 +12,11 @@ import type {
   KnowledgeRetrievalToolRequest,
   KnowledgeRetrievalToolResponse,
   Language,
+  RecordWerRequest,
   RetrievalResult,
   TranscriptTurnReport,
+  TransferCallToolRequest,
+  TransferCallToolResponse,
   UsageReport,
   VoiceAgentConfig,
 } from "@ovozai/contracts";
@@ -22,6 +25,7 @@ import { Problems } from "../common/problem.exception";
 import { toCallDto } from "../common/mappers";
 import { PrismaService } from "../prisma/prisma.service";
 import { EMBEDDING_PROVIDER } from "../knowledge/embedding.provider";
+import { WebhooksService } from "../webhooks/webhooks.service";
 
 function orderedLanguages(primary: Language): Language[] {
   const all: Language[] = ["UZ", "RU", "EN"];
@@ -37,13 +41,32 @@ export class InternalService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly webhooks: WebhooksService,
     @Inject(EMBEDDING_PROVIDER) private readonly embedder: EmbeddingProvider,
   ) {}
 
   /** Create a call and return the agent config the voice-worker loads at start. */
   async createCall(dto: InternalCreateCallRequest): Promise<InternalCreateCallResponse> {
+    // Resolve the agent: directly by id (dev dispatch) or by the dialed number
+    // (toE164 → PhoneNumber → Agent) for inbound routing.
+    let phoneNumberId: string | null = null;
+    let agentId = dto.agentId ?? null;
+    if (!agentId && dto.toE164) {
+      const number = await this.prisma.base.phoneNumber.findFirst({
+        where: { e164: dto.toE164, status: "ACTIVE", deletedAt: null },
+      });
+      if (!number || !number.agentId) {
+        throw Problems.notFound("No active agent is routed to the dialed number.");
+      }
+      agentId = number.agentId;
+      phoneNumberId = number.id;
+    }
+    if (!agentId) {
+      throw Problems.notFound("Unable to route the call: no agent or dialed number.");
+    }
+
     const agent = await this.prisma.base.agent.findFirst({
-      where: { id: dto.agentId, deletedAt: null },
+      where: { id: agentId, deletedAt: null },
     });
     if (!agent) {
       throw Problems.notFound("Agent not found.");
@@ -55,6 +78,7 @@ export class InternalService {
       data: {
         organizationId,
         agentId: agent.id,
+        phoneNumberId,
         direction: dto.direction,
         status: "RINGING",
         fromE164: dto.fromE164,
@@ -160,10 +184,75 @@ export class InternalService {
         durationSec: dto.durationSec,
         endedReason: dto.endedReason,
         recordingObjectKey: dto.recordingObjectKey,
+        recordingConsent: dto.recordingConsent,
+        transferredTo: dto.transferredTo,
         costCents: dto.costCents,
       },
     });
+    if (dto.status === "COMPLETED") {
+      await this.webhooks
+        .dispatch(updated.organizationId, "call.completed", {
+          callId: updated.id,
+          status: updated.status,
+          durationSec: updated.durationSec,
+          language: updated.language,
+        })
+        .catch(() => undefined);
+    }
     return toCallDto(updated);
+  }
+
+  /** `transfer_call` tool — record warm/cold handoff; the actual SIP bridge is the */
+  /** SIP provider (deployment config; not wired in this environment). */
+  async transferCall(
+    callId: string,
+    dto: TransferCallToolRequest,
+  ): Promise<TransferCallToolResponse> {
+    const call = await this.loadCall(callId);
+    await this.prisma.base.call.update({
+      where: { id: call.id },
+      data: { status: "TRANSFERRED", transferredTo: dto.target, endedReason: `transfer_${dto.mode}` },
+    });
+    await this.prisma.base.callEvent.create({
+      data: {
+        callId: call.id,
+        organizationId: call.organizationId,
+        type: "call.transferred",
+        payload: { target: dto.target, mode: dto.mode, reason: dto.reason } as Prisma.InputJsonValue,
+      },
+    });
+    await this.webhooks
+      .dispatch(call.organizationId, "call.transferred", { callId: call.id, target: dto.target, mode: dto.mode })
+      .catch(() => undefined);
+    await this.audit.record({
+      organizationId: call.organizationId,
+      actorType: "SYSTEM",
+      action: "call.transferred",
+      targetType: "Call",
+      targetId: call.id,
+      metadata: { target: dto.target, mode: dto.mode },
+    });
+    return { status: "transferred", target: dto.target, mode: dto.mode };
+  }
+
+  /** Record a WER sample for the call's STT provider/language (server computes it). */
+  async recordWer(callId: string, dto: RecordWerRequest): Promise<{ id: string }> {
+    const call = await this.loadCall(callId);
+    const result = computeWer(dto.reference, dto.hypothesis);
+    const measurement = await this.prisma.base.werMeasurement.create({
+      data: {
+        organizationId: call.organizationId,
+        provider: dto.provider,
+        language: dto.language,
+        wer: result.wer,
+        substitutions: result.substitutions,
+        deletions: result.deletions,
+        insertions: result.insertions,
+        referenceWords: result.referenceWords,
+        callId: call.id,
+      },
+    });
+    return { id: measurement.id };
   }
 
   async reportUsage(callId: string, dto: UsageReport): Promise<{ id: string }> {

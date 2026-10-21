@@ -11,9 +11,13 @@ import type {
   KnowledgeDocument,
   Membership,
   Organization,
+  PhoneNumber,
   Transcript,
   TranscriptTurn,
   User,
+  WebhookDelivery,
+  WebhookEndpoint,
+  WerMeasurement,
 } from "@ovozai/database";
 import type {
   AgentConfig,
@@ -30,9 +34,13 @@ import type {
   MembershipDto,
   MembershipWithUserDto,
   OrganizationDto,
+  PhoneNumberDto,
   TranscriptDto,
   TranscriptTurnDto,
   UserDto,
+  WebhookDeliveryDto,
+  WebhookEndpointDto,
+  WerMeasurementDto,
 } from "@ovozai/contracts";
 
 const iso = (date: Date | null | undefined): string | null => (date ? date.toISOString() : null);
@@ -210,7 +218,10 @@ export function toCallDto(call: Call): CallDto {
     durationSec: call.durationSec ?? null,
     endedReason: call.endedReason ?? null,
     recordingObjectKey: call.recordingObjectKey ?? null,
+    recordingConsent: call.recordingConsent,
     costCents: call.costCents ?? null,
+    phoneNumberId: call.phoneNumberId ?? null,
+    transferredTo: call.transferredTo ?? null,
     externalRef: call.externalRef ?? null,
     createdAt: call.createdAt.toISOString(),
     updatedAt: call.updatedAt.toISOString(),
@@ -248,5 +259,60 @@ export function toTranscriptDto(
     language: transcript.language,
     fullText: transcript.fullText ?? null,
     turns: transcript.turns.map(toTranscriptTurnDto),
+  };
+}
+
+export function toPhoneNumberDto(number: PhoneNumber): PhoneNumberDto {
+  return {
+    id: number.id,
+    organizationId: number.organizationId,
+    e164: number.e164,
+    provider: number.provider,
+    providerNumberId: number.providerNumberId ?? null,
+    agentId: number.agentId ?? null,
+    status: number.status,
+    capabilities: number.capabilities,
+    createdAt: number.createdAt.toISOString(),
+    updatedAt: number.updatedAt.toISOString(),
+  };
+}
+
+export function toWebhookEndpointDto(endpoint: WebhookEndpoint): WebhookEndpointDto {
+  return {
+    id: endpoint.id,
+    organizationId: endpoint.organizationId,
+    url: endpoint.url,
+    events: endpoint.events,
+    status: endpoint.status,
+    createdAt: endpoint.createdAt.toISOString(),
+    updatedAt: endpoint.updatedAt.toISOString(),
+  };
+}
+
+export function toWebhookDeliveryDto(delivery: WebhookDelivery): WebhookDeliveryDto {
+  return {
+    id: delivery.id,
+    endpointId: delivery.endpointId,
+    event: delivery.event,
+    status: delivery.status,
+    attempts: delivery.attempts,
+    responseStatus: delivery.responseStatus ?? null,
+    lastAttemptAt: iso(delivery.lastAttemptAt),
+    createdAt: delivery.createdAt.toISOString(),
+  };
+}
+
+export function toWerMeasurementDto(measurement: WerMeasurement): WerMeasurementDto {
+  return {
+    id: measurement.id,
+    provider: measurement.provider,
+    language: measurement.language,
+    wer: measurement.wer,
+    substitutions: measurement.substitutions,
+    deletions: measurement.deletions,
+    insertions: measurement.insertions,
+    referenceWords: measurement.referenceWords,
+    callId: measurement.callId ?? null,
+    createdAt: measurement.createdAt.toISOString(),
   };
 }

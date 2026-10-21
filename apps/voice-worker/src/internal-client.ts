@@ -10,7 +10,10 @@ import {
   type InternalCreateCallResponse,
   type KnowledgeRetrievalToolRequest,
   type KnowledgeRetrievalToolResponse,
+  type RecordWerRequest,
   type TranscriptTurnReport,
+  type TransferCallToolRequest,
+  type TransferCallToolResponse,
   type UsageReport,
 } from "@ovozai/contracts";
 
@@ -29,6 +32,8 @@ export interface VoiceInternalClient {
     callId: string,
     req: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse>;
+  transferCall(callId: string, req: TransferCallToolRequest): Promise<TransferCallToolResponse>;
+  recordWer(callId: string, req: RecordWerRequest): Promise<{ id: string }>;
 }
 
 export interface InternalClientConfig {
@@ -89,5 +94,11 @@ export class InternalApiClient implements VoiceInternalClient {
     req: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     return this.send("POST", INTERNAL_ROUTES.toolBookAppointment(callId), req);
+  }
+  transferCall(callId: string, req: TransferCallToolRequest): Promise<TransferCallToolResponse> {
+    return this.send("POST", INTERNAL_ROUTES.toolTransfer(callId), req);
+  }
+  recordWer(callId: string, req: RecordWerRequest): Promise<{ id: string }> {
+    return this.send("POST", INTERNAL_ROUTES.recordWer(callId), req);
   }
 }

@@ -31,6 +31,10 @@ const TENANT_SCOPED = new Set<string>([
   "Transcript",
   "TranscriptTurn",
   "UsageRecord",
+  "PhoneNumber",
+  "WebhookEndpoint",
+  "WebhookDelivery",
+  "WerMeasurement",
 ]);
 const SOFT_DELETE_MODELS = new Set<string>([
   "ApiKey",
@@ -38,6 +42,8 @@ const SOFT_DELETE_MODELS = new Set<string>([
   "KnowledgeBase",
   "KnowledgeDocument",
   "Customer",
+  "PhoneNumber",
+  "WebhookEndpoint",
 ]);
 
 const WHERE_OPS = new Set<string>([

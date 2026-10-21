@@ -10,15 +10,16 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 4 complete** (Voice MVP; also Phases 1–3) — **Phase 5 (telephony
-productionization) is next and gated: do not start it without explicit approval.** Do not build
-real SIP telephony, S3 recordings, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`.
-Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
+Current stage: **Phase 5 complete** (telephony productionization; also Phases 1–4) — **Phase 6
+(billing + integrations) is next and gated: do not start it without explicit approval.** Do not
+build billing, payments, or calendar/CRM integrations yet. Scope and sequencing live in
+`docs/ROADMAP.md`. Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
 
-> Phase 4 note: the voice loop is verified via a **simulated (text-driven) call**; the **live
-> LiveKit audio hop is implemented behind a transport interface but not wired/exercised here**
-> (needs a LiveKit server + `@livekit/rtc-node` + real provider keys). See
-> `apps/voice-worker/src/livekit-transport.ts`.
+> Phases 4–5 note: the voice loop is verified via a **simulated (text-driven) call**. The parts
+> that need external infra are built behind interfaces but **not exercised here**: the live
+> **LiveKit** audio hop (`apps/voice-worker/src/livekit-transport.ts`), a real **SIP trunk** /
+> UZ number provisioning, real **S3** (local-fs `StorageProvider` is the default), and additional
+> live STT/LLM/TTS provider keys.
 
 ## Toolchain & commands
 
@@ -128,6 +129,15 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   `INTERNAL_SERVICE_TOKEN`/`INTERNAL_HMAC_SECRET` must match between api and worker. The public
   `calls` module is read-only; all call/transcript/usage writes go through `/internal/v1`. Run a
   demo: start the API, then `VOICE_DEV_CALL_AGENT_ID=<agentId>` on the voice-worker.
+- **Telephony (Phase 5).** Inbound routing resolves `toE164` → `PhoneNumber` → `Agent` in the
+  internal `createCall`. `transfer_call` sets the Call to `TRANSFERRED`. **Recordings** go through
+  `@ovozai/integrations` `createStorageProvider` (local-fs default under a shared temp dir, so the
+  worker writes and the API builds the URL — keep `STORAGE_*` identical between them; real S3 is a
+  documented boundary), gated on `recordingConsent` (set when the agent has a `config.consentAnnouncement`).
+  **Webhooks**: `WebhooksService.dispatch()` (base client) creates `WebhookDelivery` rows + enqueues
+  the `webhook` BullMQ queue; the jobs-worker signs HMAC-SHA256 over `"<t>.<body>"` with the endpoint
+  `secret` (stored recoverable, not hashed). **WER**: recorded via the internal channel (server
+  computes `computeWer`), read via `/wer/summary`. **Multi-provider STT fallback**: `createFallbackStt`.
 
 ## Verifying a change
 

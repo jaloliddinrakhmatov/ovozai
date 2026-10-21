@@ -15,4 +15,7 @@ export * from "./customer";
 export * from "./appointment";
 export * from "./call";
 export * from "./voice";
+export * from "./phone-number";
+export * from "./webhook";
+export * from "./wer";
 export * from "./jobs";

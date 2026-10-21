@@ -1,6 +1,6 @@
 # OvozAI — Delivery Roadmap
 
-> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 4 — Voice MVP (complete) → Phase 5 next**
+> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 5 — Telephony productionization (complete) → Phase 6 next**
 
 This roadmap sequences OvozAI from an empty repository to a hardened, compliant, production voice-receptionist platform. It is written for a **small team**: each phase delivers a **vertical slice** that is demonstrable end-to-end, keeps module boundaries clean so later phases plug in cleanly, and treats Uzbek speech quality and data privacy as early, continuous concerns rather than end-of-project surprises.
 
@@ -32,8 +32,8 @@ Read alongside:
 | 1 | Development foundation | ✅ Complete | Monorepo, apps, DB wiring, health check, CI, tests — a clean runway |
 | 2 | Auth + multi-tenant core | ✅ Complete | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
 | 3 | AI agents + knowledge base | ✅ Complete | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
-| **4** | **Voice MVP** | **✅ Complete\*** | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
-| 5 | Telephony productionization | Planned | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
+| 4 | Voice MVP | ✅ Complete\* | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
+| **5** | **Telephony productionization** | **✅ Complete\*** | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
 | 6 | Billing + integrations | Planned | Plans/subscriptions/usage/payments, calendars/CRM, notifications |
 | 7 | Hardening & compliance | Planned | RLS, data residency, observability, load/scale, security audit, SOC2-style controls |
 
@@ -183,7 +183,18 @@ The first time OvozAI actually answers a phone. Integrate LiveKit, stand up the 
 
 ---
 
-## Phase 5 — Telephony Productionization
+## Phase 5 — Telephony Productionization · **COMPLETE\* (2026-10-22)**
+
+> \*Built and verified end-to-end for everything that does not require external
+> telephony infra (17-check live smoke: inbound number→agent routing, warm/cold
+> transfer → TRANSFERRED, consent-gated recording stored + retrievable, an
+> HMAC-signed webhook delivered to a live receiver, and per-provider WER tracking
+> with fallback < primary). The **real SIP trunk, Uzbekistan number provisioning,
+> LiveKit SIP ingress, real S3, and additional live STT provider keys are NOT
+> available here** — SIP/number-provisioning run behind interfaces with a mock
+> provider, recordings use a local-filesystem StorageProvider (real S3 adapter is
+> a documented boundary), and the STT fallback chain is verified with the local
+> providers. NAT/codec/latency hardening is deployment-level.
 
 ### Goal
 
@@ -191,15 +202,15 @@ Move from "works in LiveKit dev" to "answers a real Uzbekistan phone number reli
 
 ### Scope & Deliverables
 
-- [ ] **SIP trunking** via a real telephony provider (behind the `integrations` SIP adapter)
-- [ ] `phone-numbers` module — **Uzbekistan number provisioning** and call routing
-- [ ] **Warm and cold transfer** to human staff (`transfer_call` tool completed)
-- [ ] **Recordings persisted to S3-compatible storage**; recording metadata linked to calls
-- [ ] **Multi-provider STT** with **fallback** chain, **custom vocabulary**, and Uzbek tuning
-- [ ] **Continuous WER tracking** with per-provider comparison and regression alerts
-- [ ] Recording **consent** capture in the call flow (privacy-by-design)
-- [ ] `webhooks` plumbing for telephony/provider callbacks
-- [ ] Media robustness: NAT traversal, codec negotiation, latency monitoring
+- [~] **SIP trunking** — behind a SIP/telephony provider interface with a mock adapter; a real trunk is deployment config
+- [x] `phone-numbers` module — number provisioning + inbound **call routing** (dialed number → agent), verified
+- [x] **Warm and cold transfer** to human staff (`transfer_call` tool completed → Call TRANSFERRED + event)
+- [x] **Recordings persisted to storage** — `StorageProvider` (local-fs default; S3 adapter documented); recording key linked to the Call; retrievable URL
+- [x] **Multi-provider STT** with **fallback** chain + **custom vocabulary** passthrough (verified: survives a provider outage)
+- [x] **WER tracking** with per-provider / per-language comparison (regression alerts are a later ops concern)
+- [x] Recording **consent** capture + enforcement in the call flow (consent event; recording gated on consent)
+- [x] `webhooks` plumbing — endpoints + HMAC-signed outbound delivery via the jobs-worker (verified with a live receiver)
+- [~] Media robustness (NAT/codec/latency) — deployment/LiveKit-level, documented
 
 ### Exit Criteria
 

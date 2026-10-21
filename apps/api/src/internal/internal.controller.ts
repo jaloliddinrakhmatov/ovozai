@@ -5,7 +5,9 @@ import {
   callUpdateReportSchema,
   internalCreateCallRequestSchema,
   knowledgeRetrievalToolRequestSchema,
+  recordWerRequestSchema,
   transcriptTurnReportSchema,
+  transferCallToolRequestSchema,
   usageReportSchema,
   type BookAppointmentToolRequest,
   type BookAppointmentToolResponse,
@@ -16,7 +18,10 @@ import {
   type InternalCreateCallResponse,
   type KnowledgeRetrievalToolRequest,
   type KnowledgeRetrievalToolResponse,
+  type RecordWerRequest,
   type TranscriptTurnReport,
+  type TransferCallToolRequest,
+  type TransferCallToolResponse,
   type UsageReport,
 } from "@ovozai/contracts";
 import { Public } from "../common/public.decorator";
@@ -88,5 +93,21 @@ export class InternalController {
     @Body(new ZodValidationPipe(bookAppointmentToolRequestSchema)) body: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     return this.internal.bookAppointment(id, body);
+  }
+
+  @Post(":id/tools/transfer")
+  transfer(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(transferCallToolRequestSchema)) body: TransferCallToolRequest,
+  ): Promise<TransferCallToolResponse> {
+    return this.internal.transferCall(id, body);
+  }
+
+  @Post(":id/wer")
+  recordWer(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(recordWerRequestSchema)) body: RecordWerRequest,
+  ): Promise<{ id: string }> {
+    return this.internal.recordWer(id, body);
   }
 }

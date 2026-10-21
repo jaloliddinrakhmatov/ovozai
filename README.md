@@ -4,15 +4,15 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 4 complete — Voice MVP: `voice-worker` runs the real STT→LLM→TTS loop with
-VAD/barge-in and agent tools (knowledge retrieval, book appointment, end call), reporting call
-lifecycle + transcripts to the API over an HMAC-signed internal channel; plus a `calls` module
-and call-history dashboard, on top of Phases 1–3 (auth, multi-tenancy, RBAC, AI agents,
-knowledge base). Built on provider-agnostic STT/LLM/TTS adapters with a **local no-key default**.
-**The live LiveKit audio path needs a LiveKit server + provider keys and is not wired in this
-environment** — the loop is verified via a simulated call (see
-[`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 4). Real SIP telephony, recordings, and billing are
-later phases. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
+**Status:** Phase 5 complete — Telephony productionization: phone-number provisioning + inbound
+number→agent routing, warm/cold transfer, consent-gated call recordings (pluggable storage),
+multi-provider STT fallback + WER tracking, and HMAC-signed outbound webhooks — on top of the
+Phase 1–4 platform (auth, multi-tenancy, RBAC, AI agents, knowledge base, the Voice MVP).
+**External telephony infra is not wired in this environment** — a real SIP trunk / Uzbekistan
+numbers, the LiveKit audio hop, real S3, and additional STT provider keys sit behind interfaces
+(mock/local defaults); the flows are verified via a simulated call + local providers (see
+[`docs/ROADMAP.md`](docs/ROADMAP.md) Phases 4–5). Billing and external integrations are later
+phases. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
 
 ---
 

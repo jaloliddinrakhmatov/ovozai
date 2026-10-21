@@ -33,8 +33,10 @@ async function bootstrap(): Promise<void> {
       { path: "internal/v1/calls/:id/events", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/transcript", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/usage", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/wer", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/tools/knowledge-retrieval", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/tools/book-appointment", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/transfer", method: RequestMethod.ALL },
     ],
   });
   app.enableShutdownHooks();

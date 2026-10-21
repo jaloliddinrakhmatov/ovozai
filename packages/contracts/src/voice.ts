@@ -26,17 +26,21 @@ export const voiceAgentConfigSchema = z.object({
 });
 export type VoiceAgentConfig = z.infer<typeof voiceAgentConfigSchema>;
 
-/** POST /internal/v1/calls — create a call and load its agent config. */
-export const internalCreateCallRequestSchema = z.object({
-  // Phase 4 dev dispatch selects the agent directly; Phase 5 resolves toE164 →
-  // PhoneNumber → Agent.
-  agentId: z.uuid(),
-  direction: callDirectionSchema.default("INBOUND"),
-  fromE164: z.string().max(32).optional(),
-  toE164: z.string().max(32).optional(),
-  externalRef: z.string().max(200).optional(),
-  language: languageSchema.optional(),
-});
+/** POST /internal/v1/calls — create a call and load its agent config. The agent
+ * is selected directly by `agentId` (dev dispatch) or resolved from the dialed
+ * number `toE164` → PhoneNumber → Agent (Phase 5 inbound routing). */
+export const internalCreateCallRequestSchema = z
+  .object({
+    agentId: z.uuid().optional(),
+    direction: callDirectionSchema.default("INBOUND"),
+    fromE164: z.string().max(32).optional(),
+    toE164: z.string().max(32).optional(),
+    externalRef: z.string().max(200).optional(),
+    language: languageSchema.optional(),
+  })
+  .refine((v) => Boolean(v.agentId) || Boolean(v.toE164), {
+    message: "agentId or toE164 is required to route the call",
+  });
 export type InternalCreateCallRequest = z.infer<typeof internalCreateCallRequestSchema>;
 
 export const internalCreateCallResponseSchema = z.object({
@@ -76,6 +80,8 @@ export const callUpdateReportSchema = z
     durationSec: z.number().int().nonnegative().optional(),
     endedReason: z.string().max(200).optional(),
     recordingObjectKey: z.string().max(500).optional(),
+    recordingConsent: z.boolean().optional(),
+    transferredTo: z.string().max(32).optional(),
     costCents: z.number().int().nonnegative().optional(),
   })
   .refine((v) => Object.keys(v).length > 0, { message: "At least one field must be provided" });
@@ -121,3 +127,18 @@ export const bookAppointmentToolResponseSchema = z.object({
   startsAt: z.string(),
 });
 export type BookAppointmentToolResponse = z.infer<typeof bookAppointmentToolResponseSchema>;
+
+/** `transfer_call` tool — warm/cold handoff to a human (Phase 5). */
+export const transferCallToolRequestSchema = z.object({
+  target: z.string().min(3).max(32),
+  mode: z.enum(["warm", "cold"]).default("cold"),
+  reason: z.string().max(500).optional(),
+});
+export type TransferCallToolRequest = z.infer<typeof transferCallToolRequestSchema>;
+
+export const transferCallToolResponseSchema = z.object({
+  status: z.string(),
+  target: z.string(),
+  mode: z.string(),
+});
+export type TransferCallToolResponse = z.infer<typeof transferCallToolResponseSchema>;

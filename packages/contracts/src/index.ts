@@ -18,4 +18,7 @@ export * from "./voice";
 export * from "./phone-number";
 export * from "./webhook";
 export * from "./wer";
+export * from "./billing";
+export * from "./integration";
+export * from "./notification";
 export * from "./jobs";

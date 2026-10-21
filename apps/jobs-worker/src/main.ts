@@ -9,12 +9,13 @@
  */
 
 import { Worker, type Job } from "bullmq";
-import { JOB_QUEUES, embeddingJobSchema, webhookJobSchema } from "@ovozai/contracts";
+import { JOB_QUEUES, embeddingJobSchema, usageRollupJobSchema, webhookJobSchema } from "@ovozai/contracts";
 import { getRedisConnectionOptions } from "./redis-connection";
 import { createPrismaClient, loadWorkerEnv } from "./db";
 import { createEmbedderFromEnv } from "./embedder";
 import { processEmbeddingJob } from "./embedding-processor";
 import { processWebhookJob } from "./webhook-processor";
+import { processUsageRollupJob } from "./usage-rollup-processor";
 
 loadWorkerEnv();
 
@@ -73,6 +74,19 @@ webhookWorker.on("failed", (job, error) =>
   console.error("[jobs-worker] webhook job %s failed:", job?.id ?? "<unknown>", error.message),
 );
 
+const usageWorker = new Worker(
+  JOB_QUEUES.usageRollup,
+  async (job: Job) => {
+    const data = usageRollupJobSchema.parse(job.data);
+    return processUsageRollupJob({ prisma }, data);
+  },
+  { connection: getRedisConnectionOptions(), concurrency },
+);
+usageWorker.on("error", (error) => console.error("[jobs-worker] usage worker error:", error.message));
+usageWorker.on("failed", (job, error) =>
+  console.error("[jobs-worker] usage job %s failed:", job?.id ?? "<unknown>", error.message),
+);
+
 let shuttingDown = false;
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (shuttingDown) return;
@@ -81,6 +95,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   try {
     await worker.close();
     await webhookWorker.close();
+    await usageWorker.close();
     await prisma.$disconnect();
   } catch (error) {
     console.error("[jobs-worker] shutdown error:", error instanceof Error ? error.message : error);

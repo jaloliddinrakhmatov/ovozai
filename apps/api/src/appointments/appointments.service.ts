@@ -12,6 +12,9 @@ import { toAppointmentDto } from "../common/mappers";
 import type { RequestMeta } from "../common/request-context";
 import type { UserPrincipal } from "../common/principal.types";
 import { PrismaService } from "../prisma/prisma.service";
+import { IntegrationsService } from "../integrations/integrations.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { WebhooksService } from "../webhooks/webhooks.service";
 
 interface Page<T> {
   data: T[];
@@ -23,6 +26,9 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly integrations: IntegrationsService,
+    private readonly notifications: NotificationsService,
+    private readonly webhooks: WebhooksService,
   ) {}
 
   async list(query: AppointmentListQuery): Promise<Page<AppointmentDto>> {
@@ -83,7 +89,33 @@ export class AppointmentsService {
       targetId: appointment.id,
       ip: ctx.ip,
     });
-    return toAppointmentDto(appointment);
+
+    const externalCalendarId = await this.integrations.syncAppointmentToCalendar(organizationId, {
+      title: dto.title,
+      startsAt: dto.startsAt,
+      endsAt: dto.endsAt,
+    });
+    if (externalCalendarId) {
+      await this.prisma.tenant.appointment.updateMany({
+        where: { id: appointment.id },
+        data: { externalCalendarId },
+      });
+    }
+    await this.notifications
+      .dispatch(organizationId, {
+        event: "appointment.created",
+        channel: "IN_APP",
+        body: `Appointment "${dto.title}" booked for ${dto.startsAt}.`,
+      })
+      .catch(() => undefined);
+    await this.webhooks
+      .dispatch(organizationId, "appointment.created", {
+        appointmentId: appointment.id,
+        startsAt: dto.startsAt,
+      })
+      .catch(() => undefined);
+
+    return toAppointmentDto({ ...appointment, externalCalendarId: externalCalendarId ?? appointment.externalCalendarId });
   }
 
   async update(

@@ -22,6 +22,21 @@ async function main(): Promise<void> {
   const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString }) });
 
   try {
+    // Platform plan catalog (safe in all environments, including production).
+    const plans = [
+      { code: "free", name: "Free", priceCents: 0, limits: { maxAgents: 1, includedMinutes: 100 } },
+      { code: "starter", name: "Starter", priceCents: 49_000_000, limits: { maxAgents: 5, includedMinutes: 1000 } },
+      { code: "growth", name: "Growth", priceCents: 149_000_000, limits: { maxAgents: 20, includedMinutes: 5000 } },
+    ];
+    for (const plan of plans) {
+      await prisma.plan.upsert({
+        where: { code: plan.code },
+        update: { name: plan.name, priceCents: plan.priceCents, limits: plan.limits, currency: "UZS" },
+        create: { ...plan, currency: "UZS" },
+      });
+    }
+    console.log(`Seeded ${plans.length} plans`);
+
     const organization = await prisma.organization.upsert({
       where: { slug: "demo" },
       update: {},

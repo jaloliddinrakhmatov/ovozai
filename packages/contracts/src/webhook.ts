@@ -7,6 +7,8 @@ export const WEBHOOK_EVENT_TYPES = [
   "call.transferred",
   "transcript.ready",
   "appointment.created",
+  "subscription.created",
+  "payment.succeeded",
 ] as const;
 export const webhookEventTypeSchema = z.enum(WEBHOOK_EVENT_TYPES);
 export type WebhookEventType = z.infer<typeof webhookEventTypeSchema>;

@@ -22,6 +22,9 @@ import { InternalModule } from "./internal/internal.module";
 import { PhoneNumbersModule } from "./phone-numbers/phone-numbers.module";
 import { WebhooksModule } from "./webhooks/webhooks.module";
 import { WerModule } from "./wer/wer.module";
+import { BillingModule } from "./billing/billing.module";
+import { IntegrationsModule } from "./integrations/integrations.module";
+import { NotificationsModule } from "./notifications/notifications.module";
 
 @Module({
   imports: [
@@ -48,6 +51,9 @@ import { WerModule } from "./wer/wer.module";
     PhoneNumbersModule,
     WebhooksModule,
     WerModule,
+    BillingModule,
+    IntegrationsModule,
+    NotificationsModule,
     InternalModule,
     HealthModule,
   ],

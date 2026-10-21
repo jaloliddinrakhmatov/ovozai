@@ -1,6 +1,6 @@
 # OvozAI — Delivery Roadmap
 
-> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 5 — Telephony productionization (complete) → Phase 6 next**
+> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 6 — Billing & integrations (complete) → Phase 7 next**
 
 This roadmap sequences OvozAI from an empty repository to a hardened, compliant, production voice-receptionist platform. It is written for a **small team**: each phase delivers a **vertical slice** that is demonstrable end-to-end, keeps module boundaries clean so later phases plug in cleanly, and treats Uzbek speech quality and data privacy as early, continuous concerns rather than end-of-project surprises.
 
@@ -33,8 +33,8 @@ Read alongside:
 | 2 | Auth + multi-tenant core | ✅ Complete | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
 | 3 | AI agents + knowledge base | ✅ Complete | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
 | 4 | Voice MVP | ✅ Complete\* | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
-| **5** | **Telephony productionization** | **✅ Complete\*** | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
-| 6 | Billing + integrations | Planned | Plans/subscriptions/usage/payments, calendars/CRM, notifications |
+| 5 | Telephony productionization | ✅ Complete\* | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
+| **6** | **Billing + integrations** | **✅ Complete\*** | Plans/subscriptions/usage/payments, calendars/CRM, notifications |
 | 7 | Hardening & compliance | Planned | RLS, data residency, observability, load/scale, security audit, SOC2-style controls |
 
 Phases are sequential but boundaries are soft at the edges — e.g. webhook plumbing may begin in Phase 5 and complete in Phase 6. Each phase's **Exit Criteria** must be met before the next phase's slice is considered started.
@@ -222,7 +222,15 @@ Move from "works in LiveKit dev" to "answers a real Uzbekistan phone number reli
 
 ---
 
-## Phase 6 — Billing & Integrations
+## Phase 6 — Billing & Integrations · **COMPLETE\* (2026-10-22)**
+
+> \*Built and verified end-to-end for everything that does not require an external
+> provider account (19-check live smoke: plan catalog, **plan-limit enforcement**,
+> subscription via the payment provider, a **calendar-synced appointment** + a
+> **booking-confirmation notification**, and **usage metering + rollup** that
+> reconciles against raw usage). Payments (Stripe), calendar (Google), CRM, and
+> email/SMS run behind interfaces with **mock providers** by default; the real
+> adapters are documented boundaries requiring provider accounts/keys.
 
 ### Goal
 
@@ -230,13 +238,13 @@ Make OvozAI a commercial product: plans, subscriptions, metered usage, and payme
 
 ### Scope & Deliverables
 
-- [ ] `billing` module — **plans, subscriptions, usage metering, payments**
-- [ ] **Usage rollups** computed as BullMQ jobs in `jobs-worker` (call minutes, transcription, etc.)
-- [ ] Payments via `integrations` payment adapter(s)
-- [ ] `integrations` module (business-facing) — **calendar** sync (appointments ↔ external calendars) and **CRM** connectors
-- [ ] `notifications` module — email/SMS/in-app (e.g. missed call, booking confirmation)
-- [ ] Billing and usage screens in the dashboard; plan limits enforced
-- [ ] Webhooks completed for payment and integration provider events
+- [x] `billing` module — **plans** (seeded catalog), **subscriptions** (subscribe/change via a PaymentProvider), **usage metering**, and **plan-limit enforcement** (agent count)
+- [x] **Usage rollups** computed as BullMQ jobs in `jobs-worker` (reconcilable against raw UsageRecords via `rawCount`)
+- [x] Payments via a provider-agnostic `PaymentProvider` (mock default; Stripe adapter documented)
+- [x] `integrations` module (business-facing) — connect/list/disconnect + **calendar sync** of appointments (`CalendarProvider`); CRM via the same interface
+- [x] `notifications` module — in-app/email/SMS via a `NotificationProvider` (dispatched on booking; mock default)
+- [x] Billing/usage, integrations, and notifications screens in the dashboard; **plan limits enforced**
+- [x] Webhooks extended for `subscription.created` / `payment.succeeded` (plus the Phase-5 call events)
 
 ### Exit Criteria
 

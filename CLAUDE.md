@@ -10,9 +10,9 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 5 complete** (telephony productionization; also Phases 1–4) — **Phase 6
-(billing + integrations) is next and gated: do not start it without explicit approval.** Do not
-build billing, payments, or calendar/CRM integrations yet. Scope and sequencing live in
+Current stage: **Phase 6 complete** (billing + integrations; also Phases 1–5) — **Phase 7
+(hardening & compliance: RLS, data residency, retention, observability, load, security audit) is
+next and gated: do not start it without explicit approval.** Scope and sequencing live in
 `docs/ROADMAP.md`. Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
 
 > Phases 4–5 note: the voice loop is verified via a **simulated (text-driven) call**. The parts
@@ -138,6 +138,19 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   the `webhook` BullMQ queue; the jobs-worker signs HMAC-SHA256 over `"<t>.<body>"` with the endpoint
   `secret` (stored recoverable, not hashed). **WER**: recorded via the internal channel (server
   computes `computeWer`), read via `/wer/summary`. **Multi-provider STT fallback**: `createFallbackStt`.
+- **Billing & integrations (Phase 6).** `Plan` is global (seeded by `prisma/seed.ts`); everything
+  else is tenant-scoped. **Subscriptions** go through a `PaymentProvider` (`@ovozai/integrations`
+  `createPaymentProvider`; mock default, Stripe documented) and are **upserted via the base client**
+  (the tenant extension forbids `upsert`). **Plan limits**: `PlanLimitsService.assertCanCreateAgent`
+  (BillingModule, exported) gates agent creation; falls back to the `free` plan when no subscription.
+  **Usage rollups**: `POST /billing/usage/rollup` enqueues the `usage-rollup` BullMQ queue; the
+  jobs-worker aggregates `UsageRecord` → `UsageRollup` (upsert, idempotent, `rawCount` for
+  reconciliation). **Calendar sync + notifications + webhooks** are best-effort side effects of
+  appointment creation (both the `/appointments` path and the agent `book_appointment` tool), via
+  `IntegrationsService.syncAppointmentToCalendar` / `NotificationsService.dispatch` /
+  `WebhooksService.dispatch` — all use the base client with an explicit org so they work in and out
+  of request context. Business providers (`createPaymentProvider`/`createCalendarProvider`/
+  `createNotificationProvider`) default to mock; real adapters are documented boundaries.
 
 ## Verifying a change
 

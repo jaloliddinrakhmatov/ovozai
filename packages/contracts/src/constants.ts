@@ -103,6 +103,18 @@ export const API_ROUTES = {
   wer: {
     summary: `${API_BASE_PATH}/wer/summary`,
   },
+  billing: {
+    plans: `${API_BASE_PATH}/billing/plans`,
+    subscription: `${API_BASE_PATH}/billing/subscription`,
+    usage: `${API_BASE_PATH}/billing/usage`,
+  },
+  integrations: {
+    root: `${API_BASE_PATH}/integrations`,
+    byId: (id: string): string => `${API_BASE_PATH}/integrations/${id}`,
+  },
+  notifications: {
+    root: `${API_BASE_PATH}/notifications`,
+  },
 } as const;
 
 /** Internal voice-worker ↔ API routes (service-token + HMAC authenticated). */

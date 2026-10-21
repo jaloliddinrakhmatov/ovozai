@@ -4,15 +4,15 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 5 complete — Telephony productionization: phone-number provisioning + inbound
-number→agent routing, warm/cold transfer, consent-gated call recordings (pluggable storage),
-multi-provider STT fallback + WER tracking, and HMAC-signed outbound webhooks — on top of the
-Phase 1–4 platform (auth, multi-tenancy, RBAC, AI agents, knowledge base, the Voice MVP).
-**External telephony infra is not wired in this environment** — a real SIP trunk / Uzbekistan
-numbers, the LiveKit audio hop, real S3, and additional STT provider keys sit behind interfaces
-(mock/local defaults); the flows are verified via a simulated call + local providers (see
-[`docs/ROADMAP.md`](docs/ROADMAP.md) Phases 4–5). Billing and external integrations are later
-phases. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
+**Status:** Phase 6 complete — Billing & integrations: a plan catalog, subscriptions with
+plan-limit enforcement, usage metering + rollups, business integrations (calendar sync, CRM
+interface), and notifications — on top of the Phase 1–5 platform (auth, multi-tenancy, RBAC,
+AI agents, knowledge base, the Voice MVP, and telephony productionization). **External provider
+infra is not wired in this environment** — payments (Stripe), calendar (Google), CRM, email/SMS,
+a real SIP trunk / Uzbekistan numbers, the LiveKit audio hop, and real S3 all sit behind
+interfaces with **mock/local defaults**; the flows are verified via simulated calls + local
+providers (see [`docs/ROADMAP.md`](docs/ROADMAP.md)). Phase 7 (hardening & compliance) is the
+remaining phase. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
 
 ---
 

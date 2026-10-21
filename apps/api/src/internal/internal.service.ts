@@ -26,6 +26,8 @@ import { toCallDto } from "../common/mappers";
 import { PrismaService } from "../prisma/prisma.service";
 import { EMBEDDING_PROVIDER } from "../knowledge/embedding.provider";
 import { WebhooksService } from "../webhooks/webhooks.service";
+import { IntegrationsService } from "../integrations/integrations.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 function orderedLanguages(primary: Language): Language[] {
   const all: Language[] = ["UZ", "RU", "EN"];
@@ -42,6 +44,8 @@ export class InternalService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly webhooks: WebhooksService,
+    private readonly integrations: IntegrationsService,
+    private readonly notifications: NotificationsService,
     @Inject(EMBEDDING_PROVIDER) private readonly embedder: EmbeddingProvider,
   ) {}
 
@@ -359,6 +363,29 @@ export class InternalService {
       targetId: appointment.id,
       metadata: { callId },
     });
+
+    const externalCalendarId = await this.integrations.syncAppointmentToCalendar(organizationId, {
+      title: dto.title,
+      startsAt: dto.startsAt,
+      endsAt: dto.endsAt,
+      customerName: dto.customerName,
+    });
+    if (externalCalendarId) {
+      await this.prisma.base.appointment.update({
+        where: { id: appointment.id },
+        data: { externalCalendarId },
+      });
+    }
+    await this.notifications
+      .dispatch(organizationId, {
+        event: "appointment.created",
+        channel: "IN_APP",
+        body: `Appointment "${dto.title}" was booked by the agent during a call.`,
+      })
+      .catch(() => undefined);
+    await this.webhooks
+      .dispatch(organizationId, "appointment.created", { appointmentId: appointment.id, startsAt: dto.startsAt })
+      .catch(() => undefined);
 
     return {
       appointmentId: appointment.id,

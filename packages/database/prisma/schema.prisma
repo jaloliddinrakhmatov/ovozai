@@ -186,6 +186,44 @@ enum WebhookDeliveryStatus {
   FAILED
 }
 
+/// Lifecycle state of an organization's subscription.
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+/// Category of a business-facing integration.
+enum IntegrationType {
+  CALENDAR
+  CRM
+  PAYMENTS
+  TELEPHONY
+}
+
+/// Connection state of an integration.
+enum IntegrationStatus {
+  CONNECTED
+  DISCONNECTED
+  ERROR
+}
+
+/// Delivery channel for a notification.
+enum NotificationChannel {
+  EMAIL
+  SMS
+  IN_APP
+}
+
+/// Delivery state of a notification.
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
 // ---------------------------------------------------------------------------
 // Identity & tenancy core (Phase 1)
 // ---------------------------------------------------------------------------
@@ -223,6 +261,10 @@ model Organization {
   webhookEndpoints   WebhookEndpoint[]
   webhookDeliveries  WebhookDelivery[]
   werMeasurements    WerMeasurement[]
+  subscription       Subscription?
+  integrations       Integration[]
+  notifications      Notification[]
+  usageRollups       UsageRollup[]
 
   @@map("organizations")
 }
@@ -767,4 +809,110 @@ model WerMeasurement {
   @@index([organizationId])
   @@index([provider, language])
   @@map("wer_measurements")
+}
+
+// ---------------------------------------------------------------------------
+// Billing & integrations (Phase 6)
+// ---------------------------------------------------------------------------
+
+/// Platform-wide billing plan catalog. Global (not tenant-scoped). `limits` holds
+/// per-plan caps (e.g. maxAgents, includedMinutes) as JSON.
+model Plan {
+  id         String   @id @default(uuid())
+  code       String   @unique
+  name       String
+  priceCents Int      @map("price_cents")
+  currency   String   @default("UZS")
+  limits     Json?
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  subscriptions Subscription[]
+
+  @@map("plans")
+}
+
+/// An organization's active plan subscription (one per org). `external*` reference
+/// the payment provider; a mock provider is used in dev.
+model Subscription {
+  id                     String             @id @default(uuid())
+  organizationId         String             @unique @map("organization_id")
+  planId                 String             @map("plan_id")
+  status                 SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart     DateTime           @default(now()) @map("current_period_start")
+  currentPeriodEnd       DateTime           @map("current_period_end")
+  externalCustomerId     String?            @map("external_customer_id")
+  externalSubscriptionId String?            @map("external_subscription_id")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  plan         Plan         @relation(fields: [planId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@map("subscriptions")
+}
+
+/// A third-party connection configured by a tenant (calendar / CRM / payments).
+/// `config` holds non-secret settings; `secretRef` points at the secret store.
+model Integration {
+  id             String            @id @default(uuid())
+  organizationId String            @map("organization_id")
+  type           IntegrationType
+  provider       String
+  status         IntegrationStatus @default(CONNECTED)
+  config         Json?
+  secretRef      String?           @map("secret_ref")
+  createdAt      DateTime          @default(now()) @map("created_at")
+  updatedAt      DateTime          @updatedAt @map("updated_at")
+  deletedAt      DateTime?         @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, type])
+  @@map("integrations")
+}
+
+/// A notification dispatched for a key event (booking confirmation, missed call,
+/// transfer). Append-only log; delivery is via a NotificationProvider.
+model Notification {
+  id             String              @id @default(uuid())
+  organizationId String              @map("organization_id")
+  channel        NotificationChannel
+  status         NotificationStatus  @default(PENDING)
+  event          String
+  recipient      String?
+  subject        String?
+  body           String
+  metadata       Json?
+  sentAt         DateTime?           @map("sent_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+  @@index([organizationId, event])
+  @@map("notifications")
+}
+
+/// A metered-usage rollup for a billing period (aggregated from UsageRecord by the
+/// jobs-worker). `rawCount` is the number of source records (for reconciliation).
+model UsageRollup {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  metric         UsageMetric
+  periodKey      String      @map("period_key")
+  quantity       Decimal
+  rawCount       Int         @map("raw_count")
+  computedAt     DateTime    @default(now()) @map("computed_at")
+  createdAt      DateTime    @default(now()) @map("created_at")
+  updatedAt      DateTime    @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, metric, periodKey])
+  @@index([organizationId])
+  @@map("usage_rollups")
 }

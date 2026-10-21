@@ -4,6 +4,7 @@ import { z } from "zod";
 export const JOB_QUEUES = {
   embedding: "embedding",
   webhook: "webhook",
+  usageRollup: "usage-rollup",
 } as const;
 export type JobQueue = (typeof JOB_QUEUES)[keyof typeof JOB_QUEUES];
 
@@ -27,3 +28,13 @@ export const webhookJobSchema = z.object({
   organizationId: z.uuid(),
 });
 export type WebhookJob = z.infer<typeof webhookJobSchema>;
+
+/** Stable job name within the usage-rollup queue. */
+export const USAGE_ROLLUP_JOB_NAME = "rollup-usage" as const;
+
+/** Payload for a usage-rollup job: aggregate UsageRecords for an org + period. */
+export const usageRollupJobSchema = z.object({
+  organizationId: z.uuid(),
+  periodKey: z.string().min(1).max(20),
+});
+export type UsageRollupJob = z.infer<typeof usageRollupJobSchema>;

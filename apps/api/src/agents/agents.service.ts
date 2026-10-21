@@ -13,6 +13,7 @@ import { toAgentDto, toAgentVersionDto } from "../common/mappers";
 import type { RequestMeta } from "../common/request-context";
 import type { UserPrincipal } from "../common/principal.types";
 import { PrismaService } from "../prisma/prisma.service";
+import { PlanLimitsService } from "../billing/plan-limits.service";
 
 interface Page<T> {
   data: T[];
@@ -24,6 +25,7 @@ export class AgentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly planLimits: PlanLimitsService,
   ) {}
 
   async list(query: PaginationQuery): Promise<Page<AgentDto>> {
@@ -46,6 +48,7 @@ export class AgentsService {
     dto: CreateAgentRequest,
     ctx: RequestMeta,
   ): Promise<AgentDto> {
+    await this.planLimits.assertCanCreateAgent(organizationId);
     const agent = await this.prisma.tenant.agent.create({
       data: {
         organizationId,

@@ -7,11 +7,15 @@ import type {
   CallEvent,
   Customer,
   Invitation,
+  Integration,
   KnowledgeBase,
   KnowledgeDocument,
   Membership,
+  Notification,
   Organization,
   PhoneNumber,
+  Plan,
+  Subscription,
   Transcript,
   TranscriptTurn,
   User,
@@ -31,10 +35,14 @@ import type {
   InvitationDto,
   KnowledgeBaseDto,
   KnowledgeDocumentDto,
+  IntegrationDto,
   MembershipDto,
   MembershipWithUserDto,
+  NotificationDto,
   OrganizationDto,
   PhoneNumberDto,
+  PlanDto,
+  SubscriptionDto,
   TranscriptDto,
   TranscriptTurnDto,
   UserDto,
@@ -299,6 +307,60 @@ export function toWebhookDeliveryDto(delivery: WebhookDelivery): WebhookDelivery
     responseStatus: delivery.responseStatus ?? null,
     lastAttemptAt: iso(delivery.lastAttemptAt),
     createdAt: delivery.createdAt.toISOString(),
+  };
+}
+
+export function toPlanDto(plan: Plan): PlanDto {
+  return {
+    id: plan.id,
+    code: plan.code,
+    name: plan.name,
+    priceCents: plan.priceCents,
+    currency: plan.currency,
+    limits: (plan.limits ?? null) as PlanDto["limits"],
+    active: plan.active,
+  };
+}
+
+export function toSubscriptionDto(
+  subscription: Subscription & { plan: { code: string } },
+): SubscriptionDto {
+  return {
+    id: subscription.id,
+    organizationId: subscription.organizationId,
+    planId: subscription.planId,
+    planCode: subscription.plan.code,
+    status: subscription.status,
+    currentPeriodStart: subscription.currentPeriodStart.toISOString(),
+    currentPeriodEnd: subscription.currentPeriodEnd.toISOString(),
+    createdAt: subscription.createdAt.toISOString(),
+  };
+}
+
+export function toIntegrationDto(integration: Integration): IntegrationDto {
+  return {
+    id: integration.id,
+    organizationId: integration.organizationId,
+    type: integration.type,
+    provider: integration.provider,
+    status: integration.status,
+    config: (integration.config ?? null) as IntegrationDto["config"],
+    createdAt: integration.createdAt.toISOString(),
+    updatedAt: integration.updatedAt.toISOString(),
+  };
+}
+
+export function toNotificationDto(notification: Notification): NotificationDto {
+  return {
+    id: notification.id,
+    channel: notification.channel,
+    status: notification.status,
+    event: notification.event,
+    recipient: notification.recipient ?? null,
+    subject: notification.subject ?? null,
+    body: notification.body,
+    sentAt: iso(notification.sentAt),
+    createdAt: notification.createdAt.toISOString(),
   };
 }
 

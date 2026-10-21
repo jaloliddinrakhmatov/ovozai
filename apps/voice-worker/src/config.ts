@@ -1,28 +1,40 @@
 /**
- * Voice-worker configuration (Phase 1 scaffold).
- *
- * Pure, side-effect-free env reader. Importing this module must NOT start the
- * service or open any connection — only `src/main.ts` does that. Keeping config
- * loading pure lets it be unit-tested in isolation.
+ * Voice-worker configuration — a pure, side-effect-free env reader (safe to call
+ * from tests). Only `src/main.ts` has side effects.
  */
+import { config as loadEnv } from "dotenv";
 
-/** Typed, resolved configuration for the OvozAI voice worker. */
 export interface VoiceWorkerConfig {
-  /** LiveKit server URL (wired up for real in Phase 4). Empty when unset. */
+  /** Base URL of the control-plane API (for the internal channel). */
+  apiBaseUrl: string;
+  /** Internal-channel service token + HMAC secret (must match the API). */
+  serviceToken: string;
+  hmacSecret: string;
+  /** LiveKit server URL — required only for the live media transport (Phase 4+). */
   livekitUrl: string;
-  /** Upper bound on concurrent realtime voice sessions this worker will accept. */
+  /** Provider selection for STT/LLM/TTS. "local" needs no keys. */
+  voiceProvider: "local" | "openai";
+  providerApiKey?: string;
+  providerBaseUrl?: string;
   maxConcurrentSessions: number;
-  /** Logging verbosity, e.g. "debug" | "info" | "warn" | "error". */
   logLevel: string;
 }
 
-/**
- * Read the voice-worker configuration from the environment, applying sensible
- * defaults. Pure: no side effects, safe to call from tests.
- */
+/** Load env from cwd then the monorepo root (dotenv does not override). */
+export function loadVoiceWorkerEnv(): void {
+  loadEnv();
+  loadEnv({ path: "../../.env" });
+}
+
 export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
   return {
+    apiBaseUrl: process.env.VOICE_API_URL ?? process.env.APP_API_URL ?? "http://localhost:3001",
+    serviceToken: process.env.INTERNAL_SERVICE_TOKEN ?? "dev-insecure-service-token-change-me",
+    hmacSecret: process.env.INTERNAL_HMAC_SECRET ?? "dev-insecure-hmac-secret-change-me-0123456789",
     livekitUrl: process.env.LIVEKIT_URL ?? "",
+    voiceProvider: process.env.VOICE_PROVIDER === "openai" ? "openai" : "local",
+    providerApiKey: process.env.VOICE_PROVIDER_API_KEY,
+    providerBaseUrl: process.env.VOICE_PROVIDER_BASE_URL,
     maxConcurrentSessions: Number(process.env.VOICE_WORKER_MAX_SESSIONS ?? 10),
     logLevel: process.env.LOG_LEVEL ?? "info",
   };

@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import { Logger } from "@nestjs/common";
+import { Logger, RequestMethod } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
@@ -7,7 +7,9 @@ import { AppModule } from "./app.module";
 import { requestIdMiddleware } from "./common/request-id.middleware";
 
 async function bootstrap(): Promise<void> {
-  const app = await NestFactory.create(AppModule);
+  // rawBody is required so the internal channel can verify the HMAC signature
+  // over the exact request bytes.
+  const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
 
   // Correlation id on every request/response (before anything else).
@@ -22,7 +24,19 @@ async function bootstrap(): Promise<void> {
     .filter(Boolean);
   app.enableCors({ origin: corsOrigins, credentials: true });
 
-  app.setGlobalPrefix("api/v1");
+  // Public API under /api/v1; the internal voice-worker channel keeps its own
+  // /internal/v1 prefix (excluded here).
+  app.setGlobalPrefix("api/v1", {
+    exclude: [
+      { path: "internal/v1/calls", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/events", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/transcript", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/usage", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/knowledge-retrieval", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/book-appointment", method: RequestMethod.ALL },
+    ],
+  });
   app.enableShutdownHooks();
 
   const port = Number(config.get("API_PORT") ?? 3001);

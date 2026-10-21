@@ -492,9 +492,15 @@ importers:
 
   apps/voice-worker:
     dependencies:
+      '@ovozai/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@ovozai/integrations':
         specifier: workspace:*
         version: link:../../packages/integrations
+      dotenv:
+        specifier: 'catalog:'
+        version: 18.0.8
     devDependencies:
       '@ovozai/config':
         specifier: workspace:*

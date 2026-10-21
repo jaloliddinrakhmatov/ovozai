@@ -41,6 +41,12 @@ const envSchema = z
     EMBEDDING_DIMENSIONS: z.coerce.number().int().positive().default(256),
     EMBEDDING_API_KEY: z.string().optional(),
     EMBEDDING_BASE_URL: z.string().optional(),
+
+    // --- Internal voice-worker <-> API channel (service token + HMAC) ---
+    INTERNAL_SERVICE_TOKEN: z.string().default("dev-insecure-service-token-change-me"),
+    INTERNAL_HMAC_SECRET: z.string().default("dev-insecure-hmac-secret-change-me-0123456789"),
+    /** Max age (seconds) of a signed internal request before it is rejected. */
+    INTERNAL_SIGNATURE_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(300),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {
@@ -53,6 +59,13 @@ const envSchema = z
           code: "custom",
           path: ["JWT_ACCESS_SECRET"],
           message: "JWT_ACCESS_SECRET must be set to a strong (>=32 char) value in production",
+        });
+      }
+      if (env.INTERNAL_SERVICE_TOKEN.startsWith("dev-insecure") || env.INTERNAL_HMAC_SECRET.startsWith("dev-insecure")) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["INTERNAL_SERVICE_TOKEN"],
+          message: "INTERNAL_SERVICE_TOKEN and INTERNAL_HMAC_SECRET must be set to strong values in production",
         });
       }
     }

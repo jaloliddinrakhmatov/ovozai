@@ -130,6 +130,41 @@ enum AppointmentStatus {
   NO_SHOW
 }
 
+/// Direction of a call.
+enum CallDirection {
+  INBOUND
+  OUTBOUND
+}
+
+/// Lifecycle/outcome state of a call.
+enum CallStatus {
+  QUEUED
+  RINGING
+  IN_PROGRESS
+  COMPLETED
+  FAILED
+  NO_ANSWER
+  BUSY
+  CANCELED
+  TRANSFERRED
+}
+
+/// Speaker role for a transcript turn.
+enum TranscriptRole {
+  CALLER
+  AGENT
+  SYSTEM
+  TOOL
+}
+
+/// Metered usage dimension.
+enum UsageMetric {
+  CALL_MINUTES
+  STT_SECONDS
+  TTS_CHARS
+  LLM_TOKENS
+}
+
 // ---------------------------------------------------------------------------
 // Identity & tenancy core (Phase 1)
 // ---------------------------------------------------------------------------
@@ -158,6 +193,11 @@ model Organization {
   knowledgeChunks    KnowledgeChunk[]
   customers          Customer[]
   appointments       Appointment[]
+  calls              Call[]
+  callEvents         CallEvent[]
+  transcripts        Transcript[]
+  transcriptTurns    TranscriptTurn[]
+  usageRecords       UsageRecord[]
 
   @@map("organizations")
 }
@@ -342,6 +382,7 @@ model Agent {
   versions       AgentVersion[]
   knowledgeBases KnowledgeBase[]
   appointments   Appointment[]
+  calls          Call[]
 
   @@index([organizationId])
   @@map("agents")
@@ -452,6 +493,7 @@ model Customer {
 
   organization Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   appointments Appointment[]
+  calls        Call[]
 
   @@index([organizationId])
   @@index([organizationId, phoneE164])
@@ -481,4 +523,122 @@ model Appointment {
   @@index([organizationId, startsAt])
   @@index([customerId])
   @@map("appointments")
+}
+
+// ---------------------------------------------------------------------------
+// Voice / calls (Phase 4)
+// ---------------------------------------------------------------------------
+
+/// The central record of a phone interaction. PII. Mutated during the call,
+/// append-only (ledger) thereafter. `recordingObjectKey` is an S3 key, not audio.
+/// (PhoneNumber linkage arrives in Phase 5.)
+model Call {
+  id                 String        @id @default(uuid())
+  organizationId     String        @map("organization_id")
+  agentId            String?       @map("agent_id")
+  customerId         String?       @map("customer_id")
+  direction          CallDirection @default(INBOUND)
+  status             CallStatus    @default(QUEUED)
+  fromE164           String?       @map("from_e164")
+  toE164             String?       @map("to_e164")
+  language           Language      @default(UZ)
+  startedAt          DateTime      @default(now()) @map("started_at")
+  answeredAt         DateTime?     @map("answered_at")
+  endedAt            DateTime?     @map("ended_at")
+  durationSec        Int?          @map("duration_sec")
+  endedReason        String?       @map("ended_reason")
+  recordingObjectKey String?       @map("recording_object_key")
+  costCents          Int?          @map("cost_cents")
+  /// External room/session reference (e.g. LiveKit room name).
+  externalRef        String?       @map("external_ref")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  agent        Agent?       @relation(fields: [agentId], references: [id], onDelete: SetNull)
+  customer     Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  events       CallEvent[]
+  transcript   Transcript?
+  usageRecords UsageRecord[]
+
+  @@index([organizationId])
+  @@index([organizationId, status, startedAt])
+  @@map("calls")
+}
+
+/// Append-only lifecycle event for a call (ringing, answered, tool, hangup, …).
+model CallEvent {
+  id             String   @id @default(uuid())
+  callId         String   @map("call_id")
+  organizationId String   @map("organization_id")
+  type           String
+  payload        Json?
+  occurredAt     DateTime @default(now()) @map("occurred_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  call         Call         @relation(fields: [callId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([callId, occurredAt])
+  @@index([organizationId])
+  @@map("call_events")
+}
+
+/// One transcript per call; authoritative content is the ordered TranscriptTurns.
+model Transcript {
+  id             String           @id @default(uuid())
+  callId         String           @unique @map("call_id")
+  organizationId String           @map("organization_id")
+  language       Language         @default(UZ)
+  fullText       String?          @map("full_text")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  call         Call             @relation(fields: [callId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  turns        TranscriptTurn[]
+
+  @@index([organizationId])
+  @@map("transcripts")
+}
+
+/// The primary representation of transcript content — one row per utterance.
+/// Append-only. Sensitive PII.
+model TranscriptTurn {
+  id             String         @id @default(uuid())
+  transcriptId   String         @map("transcript_id")
+  organizationId String         @map("organization_id")
+  role           TranscriptRole
+  text           String
+  startMs        Int            @map("start_ms")
+  endMs          Int?           @map("end_ms")
+  confidence     Float?
+  language       Language?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  transcript   Transcript   @relation(fields: [transcriptId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([transcriptId])
+  @@index([organizationId])
+  @@map("transcript_turns")
+}
+
+/// Metered usage ledger for billing/quota. Append-only.
+model UsageRecord {
+  id             String      @id @default(uuid())
+  organizationId String      @map("organization_id")
+  metric         UsageMetric
+  quantity       Decimal
+  callId         String?     @map("call_id")
+  occurredAt     DateTime    @default(now()) @map("occurred_at")
+  periodKey      String      @map("period_key")
+  createdAt      DateTime    @default(now()) @map("created_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  call         Call?        @relation(fields: [callId], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, metric, periodKey])
+  @@map("usage_records")
 }

@@ -10,6 +10,7 @@ const PROTECTED_ROUTES = [
   "/dashboard/knowledge",
   "/dashboard/customers",
   "/dashboard/appointments",
+  "/dashboard/calls",
 ];
 
 test.describe("Phase 3 dashboard routes", () => {

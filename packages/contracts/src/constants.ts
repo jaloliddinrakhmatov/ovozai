@@ -18,7 +18,13 @@ export const HEADERS = {
   apiKey: "x-api-key",
   organizationId: "x-organization-id",
   requestId: "x-request-id",
+  /** Internal channel (voice-worker → api): service token + HMAC signature. */
+  serviceToken: "x-service-token",
+  signature: "ovozai-signature",
 } as const;
+
+/** Base path for the internal voice-worker ↔ API channel (not public). */
+export const INTERNAL_BASE_PATH = "/internal/v1" as const;
 
 /** Prefix of all issued API keys (`ovz_live_<prefix>.<secret>`). */
 export const API_KEY_PREFIX = "ovz_live_" as const;
@@ -78,4 +84,24 @@ export const API_ROUTES = {
     root: `${API_BASE_PATH}/appointments`,
     byId: (id: string): string => `${API_BASE_PATH}/appointments/${id}`,
   },
+  calls: {
+    root: `${API_BASE_PATH}/calls`,
+    byId: (id: string): string => `${API_BASE_PATH}/calls/${id}`,
+    events: (id: string): string => `${API_BASE_PATH}/calls/${id}/events`,
+    transcript: (id: string): string => `${API_BASE_PATH}/calls/${id}/transcript`,
+    recording: (id: string): string => `${API_BASE_PATH}/calls/${id}/recording`,
+  },
+} as const;
+
+/** Internal voice-worker ↔ API routes (service-token + HMAC authenticated). */
+export const INTERNAL_ROUTES = {
+  createCall: `${INTERNAL_BASE_PATH}/calls`,
+  events: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/events`,
+  transcript: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/transcript`,
+  update: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}`,
+  usage: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/usage`,
+  toolKnowledgeRetrieval: (id: string): string =>
+    `${INTERNAL_BASE_PATH}/calls/${id}/tools/knowledge-retrieval`,
+  toolBookAppointment: (id: string): string =>
+    `${INTERNAL_BASE_PATH}/calls/${id}/tools/book-appointment`,
 } as const;

@@ -13,4 +13,6 @@ export * from "./agent";
 export * from "./knowledge";
 export * from "./customer";
 export * from "./appointment";
+export * from "./call";
+export * from "./voice";
 export * from "./jobs";

@@ -26,6 +26,11 @@ const TENANT_SCOPED = new Set<string>([
   "KnowledgeChunk",
   "Customer",
   "Appointment",
+  "Call",
+  "CallEvent",
+  "Transcript",
+  "TranscriptTurn",
+  "UsageRecord",
 ]);
 const SOFT_DELETE_MODELS = new Set<string>([
   "ApiKey",

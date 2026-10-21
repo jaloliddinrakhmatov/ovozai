@@ -1,69 +1,102 @@
 /**
- * OvozAI voice-worker — process bootstrap (Phase 1 scaffold).
+ * OvozAI voice-worker — process bootstrap.
  *
- * This is the ONLY module in the package with side effects: it loads config,
- * prints a banner, installs signal handlers, and keeps the process alive like a
- * long-lived worker. All unit-testable logic lives in sibling modules (e.g.
- * `./config`) so tests never import this file and never start the service.
- *
- * Phase 1 deliberately connects to NOTHING. The real LiveKit SIP/room handling —
- * joining rooms, bridging PSTN audio, and driving the STT -> LLM -> TTS pipeline —
- * arrives in Phase 4. See ../../docs/VOICE_PIPELINE.md for the target design.
+ * Phase 4 ships the full real STT→LLM→TTS orchestration (see `./call-session`),
+ * the provider adapters (`@ovozai/integrations`), and the authenticated internal
+ * channel client (`./internal-client`). The **live media plane** (LiveKit room
+ * audio) requires a LiveKit server + the native media SDK and is NOT wired in
+ * this environment (see `./livekit-transport`). For a demonstrable, verifiable
+ * run, set `VOICE_DEV_CALL_AGENT_ID` to drive one simulated call (scripted caller
+ * turns) through the real pipeline and report it to the API.
  */
+import { createVoiceProviders } from "@ovozai/integrations";
+import { loadVoiceWorkerConfig, loadVoiceWorkerEnv } from "./config";
+import { InternalApiClient } from "./internal-client";
+import { CallSession } from "./call-session";
+import { SimulatedTransport, type SimulatedCallerUtterance } from "./transport";
 
-import { loadVoiceWorkerConfig } from "./config";
+loadVoiceWorkerEnv();
+const config = loadVoiceWorkerConfig();
 
-// Phase-4 boundary (see ../../docs/VOICE_PIPELINE.md): the real voice agent will
-// assemble its pipeline from these provider adapters supplied by
-// @ovozai/integrations. Imported type-only and re-exported purely to document
-// the contract this scaffold will fulfil — no runtime dependency yet.
-import type { SttProvider, LlmProvider, TtsProvider } from "@ovozai/integrations";
+const providers = createVoiceProviders({
+  provider: config.voiceProvider,
+  apiKey: config.providerApiKey,
+  baseUrl: config.providerBaseUrl,
+});
+const internal = new InternalApiClient({
+  baseUrl: config.apiBaseUrl,
+  serviceToken: config.serviceToken,
+  hmacSecret: config.hmacSecret,
+});
 
-/** The provider trio a real voice session will be constructed from in Phase 4. */
-export type VoicePipelineProviders = {
-  stt: SttProvider;
-  llm: LlmProvider;
-  tts: TtsProvider;
-};
+/** Scripted caller turns for a dev simulated call (UZ/RU/EN + barge-in + goodbye). */
+const DEMO_SCRIPT: SimulatedCallerUtterance[] = [
+  { text: "What are your opening hours?", language: "en" },
+  { text: "Режим работы в пятницу вечером?", language: "ru" },
+  { text: "Ish vaqti juma kuni qanday?", language: "uz", bargeInAfterChunks: 1 },
+  { text: "Thanks, goodbye", language: "en" },
+];
 
-/** Heartbeat cadence for the keep-alive log line, in milliseconds. */
-const HEARTBEAT_INTERVAL_MS = 30_000;
-
-function main(): void {
-  const config = loadVoiceWorkerConfig();
-
-  console.info("────────────────────────────────────────────────────────");
-  console.info(" OvozAI voice-worker scaffold started (Phase 1)");
-  console.info(" Real LiveKit SIP/room handling arrives in Phase 4.");
-  console.info(" See docs/VOICE_PIPELINE.md for the target design.");
-  console.info("────────────────────────────────────────────────────────");
-  console.info(" config: %o", {
-    livekitUrl: config.livekitUrl || "(unset)",
-    maxConcurrentSessions: config.maxConcurrentSessions,
-    logLevel: config.logLevel,
+async function runDevCall(agentId: string): Promise<void> {
+  const created = await internal.createCall({
+    agentId,
+    direction: "INBOUND",
+    fromE164: "+998900000000",
+    toE164: "+998711111111",
   });
-  console.info(" Phase 1 does not connect to any external service.");
+  const session = new CallSession({
+    callId: created.callId,
+    organizationId: created.organizationId,
+    agent: created.agent,
+    providers,
+    internal,
+    transport: new SimulatedTransport(DEMO_SCRIPT),
+    logger: (message) => console.warn("[voice-worker]", message),
+  });
+  await session.run();
+  console.info("[voice-worker] dev call %s complete (state=%s)", created.callId, session.currentState);
+}
 
-  // Keep the event loop alive so the service behaves like a long-lived worker.
-  // Intentionally NOT unref()'d — this handle is what keeps the process running
-  // until a shutdown signal is received.
+async function main(): Promise<void> {
+  console.info("────────────────────────────────────────────────────────");
+  console.info(" OvozAI voice-worker started");
+  console.info(" providers: %s | api: %s", config.voiceProvider, config.apiBaseUrl);
+  console.info("────────────────────────────────────────────────────────");
+
+  const devAgentId = process.env.VOICE_DEV_CALL_AGENT_ID;
+  if (devAgentId) {
+    console.info("[voice-worker] running simulated dev call for agent %s", devAgentId);
+    await runDevCall(devAgentId);
+    process.exit(0);
+  }
+
+  if (config.livekitUrl) {
+    console.info(
+      "[voice-worker] LIVEKIT_URL is set, but the live media transport needs @livekit/rtc-node + a running server (see livekit-transport.ts). Idling.",
+    );
+  } else {
+    console.info(
+      "[voice-worker] Set VOICE_DEV_CALL_AGENT_ID to run a simulated call, or LIVEKIT_URL for live media. Idling.",
+    );
+  }
+
   const heartbeat = setInterval(() => {
-    console.debug("[voice-worker] heartbeat — idle scaffold, awaiting Phase 4");
-  }, HEARTBEAT_INTERVAL_MS);
+    console.debug("[voice-worker] heartbeat — idle, awaiting dispatch");
+  }, 30_000);
 
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals): void => {
-    if (shuttingDown) {
-      return;
-    }
+    if (shuttingDown) return;
     shuttingDown = true;
     console.info("[voice-worker] received %s — shutting down", signal);
     clearInterval(heartbeat);
     process.exit(0);
   };
-
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
 }
 
-main();
+void main().catch((error) => {
+  console.error("[voice-worker] fatal:", error instanceof Error ? error.message : error);
+  process.exit(1);
+});

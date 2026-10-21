@@ -14,7 +14,9 @@
     "clean": "rm -rf dist .turbo"
   },
   "dependencies": {
-    "@ovozai/integrations": "workspace:*"
+    "@ovozai/contracts": "workspace:*",
+    "@ovozai/integrations": "workspace:*",
+    "dotenv": "catalog:"
   },
   "devDependencies": {
     "@ovozai/config": "workspace:*",

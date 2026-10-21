@@ -4,12 +4,15 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 3 complete — AI agents (config + versioning), a knowledge base
-(document ingestion → chunking → embeddings → retrieval, with embedding jobs run by the
-`jobs-worker`), customers, and appointments, on top of the Phase 1–2 foundation
-(auth, multi-tenancy, RBAC, dashboard). Voice calling, telephony, and billing arrive in
-later phases. See [`docs/ROADMAP.md`](docs/ROADMAP.md). Note: knowledge-document ingestion
-requires the `jobs-worker` and Redis running (`pnpm dev` starts all apps).
+**Status:** Phase 4 complete — Voice MVP: `voice-worker` runs the real STT→LLM→TTS loop with
+VAD/barge-in and agent tools (knowledge retrieval, book appointment, end call), reporting call
+lifecycle + transcripts to the API over an HMAC-signed internal channel; plus a `calls` module
+and call-history dashboard, on top of Phases 1–3 (auth, multi-tenancy, RBAC, AI agents,
+knowledge base). Built on provider-agnostic STT/LLM/TTS adapters with a **local no-key default**.
+**The live LiveKit audio path needs a LiveKit server + provider keys and is not wired in this
+environment** — the loop is verified via a simulated call (see
+[`docs/ROADMAP.md`](docs/ROADMAP.md) Phase 4). Real SIP telephony, recordings, and billing are
+later phases. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
 
 ---
 

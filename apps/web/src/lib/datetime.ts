@@ -41,3 +41,19 @@ export function localInputToIso(value: string): string | null {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
+
+/**
+ * Format a duration in seconds as a compact `H:MM:SS` / `M:SS` string (e.g.
+ * `2:05`, `1:03:20`), or `—` when absent/invalid.
+ */
+export function formatDuration(seconds: number | null | undefined): string {
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds) || seconds < 0) {
+    return "—";
+  }
+  const total = Math.floor(seconds);
+  const hrs = Math.floor(total / 3600);
+  const mins = Math.floor((total % 3600) / 60);
+  const secs = total % 60;
+  const pad = (n: number): string => String(n).padStart(2, "0");
+  return hrs > 0 ? `${hrs}:${pad(mins)}:${pad(secs)}` : `${mins}:${pad(secs)}`;
+}

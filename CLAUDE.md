@@ -10,10 +10,15 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 3 complete** (AI agents + knowledge base; also Phases 1–2) — **Phase 4
-(voice MVP) is next and gated: do not start it without explicit approval.** Do not build voice
-calling, telephony, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`. Full design
-is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
+Current stage: **Phase 4 complete** (Voice MVP; also Phases 1–3) — **Phase 5 (telephony
+productionization) is next and gated: do not start it without explicit approval.** Do not build
+real SIP telephony, S3 recordings, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`.
+Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
+
+> Phase 4 note: the voice loop is verified via a **simulated (text-driven) call**; the **live
+> LiveKit audio hop is implemented behind a transport interface but not wired/exercised here**
+> (needs a LiveKit server + `@livekit/rtc-node` + real provider keys). See
+> `apps/voice-worker/src/livekit-transport.ts`.
 
 ## Toolchain & commands
 
@@ -109,10 +114,20 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   the doc `PENDING` and enqueues a BullMQ job; **`apps/jobs-worker` must be running** for it to
   become `READY` (it chunks → embeds → stores chunks; retries with backoff; terminal `FAILED`).
 - **Tenant-scoped models now include** Agent, AgentVersion, KnowledgeBase, KnowledgeDocument,
-  KnowledgeChunk, Customer, Appointment (see `tenant.extension.ts`). Same rule: on these, use
-  `findFirst`/`updateMany`/`deleteMany` via `prisma.tenant`, never `findUnique`/`update`/`delete`.
-  The jobs-worker runs outside any request, so it uses the **unscoped base client with an
-  explicit `organizationId`** from the job payload.
+  KnowledgeChunk, Customer, Appointment, Call, CallEvent, Transcript, TranscriptTurn, UsageRecord
+  (see `tenant.extension.ts`). Same rule: on these, use `findFirst`/`updateMany`/`deleteMany` via
+  `prisma.tenant`, never `findUnique`/`update`/`delete`. Workers and the internal channel run
+  outside any request, so they use the **unscoped base client with an explicit `organizationId`**.
+- **Voice MVP (Phase 4).** `apps/voice-worker` runs the STT→LLM→TTS loop (`CallSession`) behind
+  an `AudioTransport` interface: `SimulatedTransport` (text-driven, used for tests/the dev call)
+  and `livekit-transport.ts` (the live media hop — NOT wired; needs a server + `@livekit/rtc-node`).
+  Providers come from `@ovozai/integrations` `createVoiceProviders` (local default; OpenAI-compatible
+  real adapters). The worker reports to the **internal channel** `/internal/v1/...` (excluded from
+  the `api/v1` prefix in `main.ts`), authenticated by `InternalAuthGuard` with a service token +
+  HMAC over the **raw body** (so `NestFactory.create(AppModule, { rawBody: true })` is required).
+  `INTERNAL_SERVICE_TOKEN`/`INTERNAL_HMAC_SECRET` must match between api and worker. The public
+  `calls` module is read-only; all call/transcript/usage writes go through `/internal/v1`. Run a
+  demo: start the API, then `VOICE_DEV_CALL_AGENT_ID=<agentId>` on the voice-worker.
 
 ## Verifying a change
 

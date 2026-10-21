@@ -3,12 +3,16 @@ import type {
   AgentVersion,
   ApiKey,
   Appointment,
+  Call,
+  CallEvent,
   Customer,
   Invitation,
   KnowledgeBase,
   KnowledgeDocument,
   Membership,
   Organization,
+  Transcript,
+  TranscriptTurn,
   User,
 } from "@ovozai/database";
 import type {
@@ -17,6 +21,8 @@ import type {
   AgentVersionDto,
   ApiKeyDto,
   AppointmentDto,
+  CallDto,
+  CallEventDto,
   CustomerDto,
   InvitationDto,
   KnowledgeBaseDto,
@@ -24,6 +30,8 @@ import type {
   MembershipDto,
   MembershipWithUserDto,
   OrganizationDto,
+  TranscriptDto,
+  TranscriptTurnDto,
   UserDto,
 } from "@ovozai/contracts";
 
@@ -182,5 +190,63 @@ export function toAppointmentDto(appointment: Appointment): AppointmentDto {
     externalCalendarId: appointment.externalCalendarId ?? null,
     createdAt: appointment.createdAt.toISOString(),
     updatedAt: appointment.updatedAt.toISOString(),
+  };
+}
+
+export function toCallDto(call: Call): CallDto {
+  return {
+    id: call.id,
+    organizationId: call.organizationId,
+    agentId: call.agentId ?? null,
+    customerId: call.customerId ?? null,
+    direction: call.direction,
+    status: call.status,
+    fromE164: call.fromE164 ?? null,
+    toE164: call.toE164 ?? null,
+    language: call.language,
+    startedAt: call.startedAt.toISOString(),
+    answeredAt: iso(call.answeredAt),
+    endedAt: iso(call.endedAt),
+    durationSec: call.durationSec ?? null,
+    endedReason: call.endedReason ?? null,
+    recordingObjectKey: call.recordingObjectKey ?? null,
+    costCents: call.costCents ?? null,
+    externalRef: call.externalRef ?? null,
+    createdAt: call.createdAt.toISOString(),
+    updatedAt: call.updatedAt.toISOString(),
+  };
+}
+
+export function toCallEventDto(event: CallEvent): CallEventDto {
+  return {
+    id: event.id,
+    callId: event.callId,
+    type: event.type,
+    payload: event.payload ?? null,
+    occurredAt: event.occurredAt.toISOString(),
+  };
+}
+
+export function toTranscriptTurnDto(turn: TranscriptTurn): TranscriptTurnDto {
+  return {
+    id: turn.id,
+    role: turn.role,
+    text: turn.text,
+    startMs: turn.startMs,
+    endMs: turn.endMs ?? null,
+    confidence: turn.confidence ?? null,
+    language: turn.language ?? null,
+  };
+}
+
+export function toTranscriptDto(
+  transcript: Transcript & { turns: TranscriptTurn[] },
+): TranscriptDto {
+  return {
+    id: transcript.id,
+    callId: transcript.callId,
+    language: transcript.language,
+    fullText: transcript.fullText ?? null,
+    turns: transcript.turns.map(toTranscriptTurnDto),
   };
 }

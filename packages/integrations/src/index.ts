@@ -4,3 +4,7 @@ export * from "./llm";
 export * from "./tts";
 export * from "./embedding";
 export * from "./chunk";
+export * from "./wer";
+export * from "./providers-local";
+export * from "./providers-openai";
+export * from "./voice-providers";

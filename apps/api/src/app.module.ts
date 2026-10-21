@@ -17,6 +17,8 @@ import { AgentsModule } from "./agents/agents.module";
 import { KnowledgeModule } from "./knowledge/knowledge.module";
 import { CustomersModule } from "./customers/customers.module";
 import { AppointmentsModule } from "./appointments/appointments.module";
+import { CallsModule } from "./calls/calls.module";
+import { InternalModule } from "./internal/internal.module";
 
 @Module({
   imports: [
@@ -39,6 +41,8 @@ import { AppointmentsModule } from "./appointments/appointments.module";
     KnowledgeModule,
     CustomersModule,
     AppointmentsModule,
+    CallsModule,
+    InternalModule,
     HealthModule,
   ],
   providers: [

@@ -1,6 +1,6 @@
 # OvozAI — Delivery Roadmap
 
-> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 3 — AI agents & knowledge base (complete) → Phase 4 next**
+> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 4 — Voice MVP (complete) → Phase 5 next**
 
 This roadmap sequences OvozAI from an empty repository to a hardened, compliant, production voice-receptionist platform. It is written for a **small team**: each phase delivers a **vertical slice** that is demonstrable end-to-end, keeps module boundaries clean so later phases plug in cleanly, and treats Uzbek speech quality and data privacy as early, continuous concerns rather than end-of-project surprises.
 
@@ -31,8 +31,8 @@ Read alongside:
 | --- | --- | --- | --- |
 | 1 | Development foundation | ✅ Complete | Monorepo, apps, DB wiring, health check, CI, tests — a clean runway |
 | 2 | Auth + multi-tenant core | ✅ Complete | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
-| **3** | **AI agents + knowledge base** | **✅ Complete** | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
-| 4 | Voice MVP | Planned | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
+| 3 | AI agents + knowledge base | ✅ Complete | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
+| **4** | **Voice MVP** | **✅ Complete\*** | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
 | 5 | Telephony productionization | Planned | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
 | 6 | Billing + integrations | Planned | Plans/subscriptions/usage/payments, calendars/CRM, notifications |
 | 7 | Hardening & compliance | Planned | RLS, data residency, observability, load/scale, security audit, SOC2-style controls |
@@ -144,7 +144,16 @@ Let a business define *what the agent knows and how it behaves* — before it ca
 
 ---
 
-## Phase 4 — Voice MVP
+## Phase 4 — Voice MVP · **COMPLETE\* (2026-10-22)**
+
+> \*Built and verified end-to-end via a **simulated (text-driven) call** through the
+> real pipeline (25-check live smoke: agent answers knowledge-grounded questions in
+> UZ/RU/EN, barge-in, transcript + events persisted, API authoritative). The
+> provider adapters (STT/LLM/TTS) ship with a **local no-key default** and real
+> OpenAI-compatible adapters. The **live LiveKit audio hop is implemented behind a
+> transport interface but NOT exercised here** — it needs a LiveKit server +
+> `@livekit/rtc-node` + real provider keys (see `apps/voice-worker/src/livekit-transport.ts`).
+> Recordings to S3 and real SIP telephony are Phase 5.
 
 ### Goal
 
@@ -152,16 +161,16 @@ The first time OvozAI actually answers a phone. Integrate LiveKit, stand up the 
 
 ### Scope & Deliverables
 
-- [ ] `apps/voice-worker` — LiveKit agent that joins rooms and runs the **STT→LLM→TTS loop** (see [`VOICE_PIPELINE.md`](./VOICE_PIPELINE.md))
-- [ ] LiveKit integration (server SDK + agents framework); **LiveKit + MinIO added to docker-compose**
-- [ ] **One provider each** for STT, LLM, TTS behind the `integrations` interfaces
-- [ ] VAD-based turn-taking and **barge-in**
-- [ ] Core agent tools wired: knowledge retrieval, `book_appointment`, `end_call` (transfer stubbed for Phase 5)
-- [ ] `calls` module — call history, **transcripts**, recording metadata
-- [ ] **Internal authenticated channel** carrying call lifecycle events from voice-worker → api
-- [ ] Basic **multilingual** conversation (Uzbek / Russian / English)
-- [ ] **WER measurement harness** — start measuring Uzbek STT quality from day one of voice
-- [ ] Dashboard call-history view with transcript playback of text
+- [x] `apps/voice-worker` — runs the **STT→LLM→TTS loop** + state machine behind a transport interface (SimulatedTransport verified; LiveKit transport is the documented, not-yet-wired media hop)
+- [~] LiveKit integration — transport interface + boundary in place; the live media SDK/server is not wired here (needs `@livekit/rtc-node` + a server). MinIO/recordings deferred to Phase 5
+- [x] **One provider each** for STT, LLM, TTS behind the `integrations` interfaces (local deterministic default + OpenAI-compatible real adapters)
+- [x] VAD-based turn-taking and **barge-in** (cancellable TTS via AbortSignal; verified)
+- [x] Core agent tools wired: `knowledge_retrieval`, `book_appointment`, `end_call` (transfer stubbed for Phase 5)
+- [x] `calls` module — call history, **transcripts**, recording metadata (object key field; S3 upload in Phase 5)
+- [x] **Internal authenticated channel** (service token + HMAC over `/internal/v1`) carrying call lifecycle events + transcript + tools from voice-worker → api
+- [x] Basic **multilingual** conversation (Uzbek / Russian / English) — verified
+- [x] **WER measurement harness** — `computeWer` + a recorded first Uzbek baseline
+- [x] Dashboard call-history view with transcript + events
 
 ### Exit Criteria
 

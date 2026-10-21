@@ -1,0 +1,40 @@
+{
+  "name": "ovozai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "OvozAI — AI-powered Voice Receptionist SaaS for businesses in Uzbekistan",
+  "packageManager": "pnpm@12.14.0",
+  "engines": {
+    "node": ">=20.9.0",
+    "pnpm": ">=12"
+  },
+  "prettier": "@ovozai/config/prettier",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "turbo run test:e2e",
+    "format": "prettier --write \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml,css}\" --ignore-path .gitignore --cache",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,jsx,mjs,cjs,json,md,yaml,yml,css}\" --ignore-path .gitignore --cache",
+    "clean": "turbo run clean",
+    "db:generate": "pnpm --filter @ovozai/database generate",
+    "db:migrate": "pnpm --filter @ovozai/database migrate:dev",
+    "db:migrate:deploy": "pnpm --filter @ovozai/database migrate:deploy",
+    "db:studio": "pnpm --filter @ovozai/database studio",
+    "db:seed": "pnpm --filter @ovozai/database seed",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "devDependencies": {
+    "@ovozai/config": "workspace:*",
+    "@types/node": "catalog:",
+    "eslint": "catalog:",
+    "prettier": "catalog:",
+    "turbo": "catalog:",
+    "typescript": "catalog:",
+    "typescript-eslint": "catalog:"
+  }
+}

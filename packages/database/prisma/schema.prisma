@@ -1,0 +1,95 @@
+// OvozAI — Prisma schema
+//
+// Prisma 7 notes:
+//   - The datasource block no longer carries a `url`. Connection config for the
+//     CLI (migrate/studio) lives in ../prisma.config.ts; the PrismaClient is
+//     constructed at runtime with a driver adapter (@prisma/adapter-pg) — see
+//     apps/api PrismaService.
+//   - The generated client is emitted to ./src/generated/client (gitignored).
+//
+// Phase 1 implements only the tenancy/identity core (Organization, User,
+// Membership) — enough to exercise the migration pipeline. The full target data
+// model is documented in ../../../docs/DATABASE.md and lands in later phases.
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../src/generated/client"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// Lifecycle state of a tenant organization.
+enum OrganizationStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+/// Role of a user within an organization (RBAC).
+enum MembershipRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+/// Lifecycle state of a user account.
+enum UserStatus {
+  ACTIVE
+  DISABLED
+}
+
+/// A tenant. Every tenant-scoped table in later phases carries `organizationId`.
+model Organization {
+  id        String             @id @default(uuid())
+  name      String
+  slug      String             @unique
+  status    OrganizationStatus @default(ACTIVE)
+  /// Default BCP-47 locale for the org (e.g. "uz", "ru", "en").
+  locale    String             @default("uz")
+  createdAt DateTime           @default(now()) @map("created_at")
+  updatedAt DateTime           @updatedAt @map("updated_at")
+  deletedAt DateTime?          @map("deleted_at")
+
+  memberships Membership[]
+
+  @@map("organizations")
+}
+
+/// A human identity. A user may belong to several organizations via Membership.
+model User {
+  id             String     @id @default(uuid())
+  email          String     @unique
+  hashedPassword String?    @map("hashed_password")
+  name           String?
+  status         UserStatus @default(ACTIVE)
+  lastLoginAt    DateTime?  @map("last_login_at")
+  createdAt      DateTime   @default(now()) @map("created_at")
+  updatedAt      DateTime   @updatedAt @map("updated_at")
+  deletedAt      DateTime?  @map("deleted_at")
+
+  memberships Membership[]
+
+  @@map("users")
+}
+
+/// Join between User and Organization, carrying the user's role in that org.
+model Membership {
+  id             String         @id @default(uuid())
+  organizationId String         @map("organization_id")
+  userId         String         @map("user_id")
+  role           MembershipRole @default(MEMBER)
+  invitedAt      DateTime?      @map("invited_at")
+  acceptedAt     DateTime?      @map("accepted_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId])
+  @@index([userId])
+  @@map("memberships")
+}

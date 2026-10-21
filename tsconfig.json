@@ -1,0 +1,6 @@
+{
+  "//": "Root tsconfig for editor defaults only. Each app/package has its own tsconfig that extends @ovozai/config.",
+  "extends": "@ovozai/config/tsconfig/base.json",
+  "files": [],
+  "exclude": ["node_modules", "dist", ".next", "coverage"]
+}

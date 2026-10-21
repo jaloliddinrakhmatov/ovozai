@@ -1,0 +1,9 @@
+{
+  "extends": "@ovozai/config/tsconfig/library.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node"]
+  },
+  "include": ["prisma.config.ts", "src/seed.ts"],
+  "exclude": ["node_modules", "dist", "src/generated"]
+}

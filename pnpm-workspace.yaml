@@ -1,0 +1,98 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+
+# Centralized, single-source-of-truth version catalog.
+# Workspace packages reference these with `"name": "catalog:"`.
+# All versions verified mutually compatible on 2026-10-21.
+# See CLAUDE.md and docs/ARCHITECTURE.md for the pinning rationale
+# (notably: TypeScript stays on 5.9.x for typescript-eslint compat,
+#  Prisma stays on stable 7.x because `latest` is an 8.0 release candidate).
+allowBuilds:
+  '@prisma/engines': true
+  '@swc/core': true
+  esbuild: true
+  msgpackr-extract: true
+  prisma: true
+
+catalog:
+  # --- Language & runtime types ---
+  typescript: ^5.9.3
+  "@types/node": ^24.0.0
+
+  # --- Monorepo tooling ---
+  turbo: ^2.11.10
+  tsup: ^9.0.0
+  tsx: ^4.23.15
+  cross-env: ^10.1.0
+
+  # --- Frontend (Next.js / React) ---
+  next: ^16.4.2
+  react: ^19.3.1
+  react-dom: ^19.3.1
+  "@types/react": ^19.0.0
+  "@types/react-dom": ^19.0.0
+
+  # --- Styling ---
+  tailwindcss: ^4.3.3
+  "@tailwindcss/postcss": ^4.3.3
+  clsx: ^2.1.1
+  tailwind-merge: ^3.4.0
+
+  # --- Backend (NestJS) ---
+  "@nestjs/common": ^12.2.0
+  "@nestjs/core": ^12.2.0
+  "@nestjs/platform-express": ^12.2.0
+  "@nestjs/config": ^12.0.1
+  "@nestjs/terminus": ^12.1.0
+  "@nestjs/testing": ^12.2.0
+  "@nestjs/cli": ^12.0.10
+  reflect-metadata: ^0.2.2
+  rxjs: ^7.8.2
+  helmet: ^8.3.0
+  "@types/express": ^5.0.6
+
+  # --- Database (Prisma / PostgreSQL) ---
+  prisma: ^7.10.1
+  "@prisma/client": ^7.10.1
+  "@prisma/client-runtime-utils": ^7.10.1
+  "@prisma/adapter-pg": ^7.10.1
+  pg: ^8.23.1
+  "@types/pg": ^8.23.1
+  dotenv: ^18.0.8
+
+  # --- Cache & queues ---
+  bullmq: ^6.4.0
+  ioredis: ^6.0.0
+
+  # --- Validation / shared contracts ---
+  zod: ^4.6.7
+
+  # --- Linting & formatting ---
+  eslint: ^10.13.0
+  "@eslint/js": ^10.0.1
+  typescript-eslint: ^8.72.0
+  eslint-config-prettier: ^10.1.8
+  eslint-plugin-react-hooks: ^7.1.1
+  globals: ^17.13.0
+  prettier: ^3.9.10
+
+  # --- Testing ---
+  vitest: ^5.0.5
+  "@vitejs/plugin-react": ^6.1.2
+  unplugin-swc: ^2.0.0
+  "@swc/core": ^1.16.18
+  "@playwright/test": ^1.64.1
+  supertest: ^7.3.1
+  "@types/supertest": ^7.2.1
+
+minimumReleaseAgeExclude:
+  - "@nestjs/cli@12.0.10"
+  - "@turbo/darwin-64@2.11.10"
+  - "@turbo/darwin-arm64@2.11.10"
+  - "@turbo/linux-64@2.11.10"
+  - "@turbo/linux-arm64@2.11.10"
+  - "@turbo/windows-64@2.11.10"
+  - "@turbo/windows-arm64@2.11.10"
+  - bullmq@6.4.0
+  - turbo@2.11.10

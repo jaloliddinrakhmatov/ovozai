@@ -1,5 +1,6 @@
 import { Button } from "@ovozai/ui";
 import { BackendStatus } from "@/components/backend-status";
+import { HeaderAuthNav } from "@/components/header-auth-nav";
 
 interface Feature {
   title: string;
@@ -38,9 +39,7 @@ export default function HomePage() {
             Ovoz<span className="text-muted-foreground">AI</span>
           </span>
           <nav aria-label="Primary">
-            <Button variant="ghost" size="sm">
-              Sign in
-            </Button>
+            <HeaderAuthNav />
           </nav>
         </div>
       </header>

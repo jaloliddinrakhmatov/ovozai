@@ -14,7 +14,7 @@ export class PostgresHealthIndicator {
     const indicator = this.healthIndicatorService.check(key);
     try {
       await Promise.race([
-        this.prisma.$queryRaw`SELECT 1`,
+        this.prisma.base.$queryRaw`SELECT 1`,
         new Promise((_, reject) =>
           setTimeout(() => reject(new Error("PostgreSQL ping timed out")), 2000),
         ),

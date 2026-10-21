@@ -1,11 +1,14 @@
 import { Controller, Get } from "@nestjs/common";
 import { HealthCheck, HealthCheckService, type HealthCheckResult } from "@nestjs/terminus";
 import type { LivenessResponse } from "@ovozai/contracts";
+import { Public } from "../common/public.decorator";
 import { PostgresHealthIndicator } from "./postgres.health";
 import { RedisHealthIndicator } from "./redis.health";
 
 // Routes are mounted under the global prefix `api/v1`, yielding
 // GET /api/v1/health and GET /api/v1/health/ready.
+// Health endpoints are unauthenticated (see docs/API.md §10).
+@Public()
 @Controller()
 export class HealthController {
   constructor(

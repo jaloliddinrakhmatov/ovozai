@@ -1,6 +1,6 @@
 # OvozAI — Delivery Roadmap
 
-> **Status:** Living document · **Last updated:** 2026-10-21 · **Current phase:** **Phase 1 — Development foundation (in progress)**
+> **Status:** Living document · **Last updated:** 2026-10-22 · **Current phase:** **Phase 2 — Authentication & multi-tenant core (complete) → Phase 3 next**
 
 This roadmap sequences OvozAI from an empty repository to a hardened, compliant, production voice-receptionist platform. It is written for a **small team**: each phase delivers a **vertical slice** that is demonstrable end-to-end, keeps module boundaries clean so later phases plug in cleanly, and treats Uzbek speech quality and data privacy as early, continuous concerns rather than end-of-project surprises.
 
@@ -29,8 +29,8 @@ Read alongside:
 
 | Phase | Theme | Status | Primary outcome |
 | --- | --- | --- | --- |
-| **1** | **Development foundation** | **In progress** | Monorepo, apps, DB wiring, health check, CI, tests — a clean runway |
-| 2 | Auth + multi-tenant core | Planned | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
+| 1 | Development foundation | ✅ Complete | Monorepo, apps, DB wiring, health check, CI, tests — a clean runway |
+| **2** | **Auth + multi-tenant core** | **✅ Complete** | Sign-in, organizations, memberships, RBAC, API keys, dashboard shell, audit log |
 | 3 | AI agents + knowledge base | Planned | Configurable agents, document ingestion/embeddings/retrieval, customers, appointments |
 | 4 | Voice MVP | Planned | Inbound call answered by an AI agent; basic multilingual chat; transcripts |
 | 5 | Telephony productionization | Planned | Real SIP trunk, UZ numbers, transfers, recordings to S3, multi-provider STT + WER |
@@ -75,7 +75,12 @@ Stand up a clean, reproducible development runway: the full monorepo skeleton, t
 
 ---
 
-## Phase 2 — Authentication & Multi-Tenant Core
+## Phase 2 — Authentication & Multi-Tenant Core · **COMPLETE (2026-10-22)**
+
+> Delivered and verified end-to-end against live PostgreSQL + Redis. Two entities
+> beyond the original ERD were added to support the flows (`Session` for rotating
+> refresh tokens, `Invitation` for invite-by-email) — see `docs/DATABASE.md` /
+> schema ADR notes. `auth/register` was added to the API surface for sign-up.
 
 ### Goal
 
@@ -83,16 +88,16 @@ Turn the skeleton into a real multi-tenant SaaS shell: users can sign up, create
 
 ### Scope & Deliverables
 
-- [ ] `auth` module — JWT **access + refresh** tokens; login, refresh, logout; password handling
-- [ ] `users` module — identity and profile
-- [ ] `organizations` module — tenant lifecycle (create/update)
-- [ ] `memberships` module — user↔org links with a **role**, invitations, membership verification
-- [ ] `api-keys` module — organization-scoped programmatic keys
-- [ ] **RBAC guards + decorators** enforcing OWNER / ADMIN / MEMBER / VIEWER (AGENT_OPERATOR reserved)
-- [ ] **Multi-tenancy enforcement** — Prisma Client extension injecting/validating `organizationId`; tenant resolved from the principal's active-organization claim and checked against membership
-- [ ] `audit-log` module — append-only record of security-relevant actions
-- [ ] **Dashboard shell** in `apps/web` — authenticated layout, org switcher, member management screens (minimal)
-- [ ] `packages/ui` grows the shared components the shell needs
+- [x] `auth` module — JWT **access + rotating refresh** tokens; register, login, refresh, logout, switch-org; argon2id password handling
+- [x] `users` module — identity and profile
+- [x] `organizations` module — tenant lifecycle (create / read / update / soft-delete)
+- [x] `memberships` module — user↔org links with a **role**, invitations (invite / accept), role change, removal, last-owner protection
+- [x] `api-keys` module — organization-scoped programmatic keys (hashed, prefixed, shown once)
+- [x] **RBAC guards + decorators** enforcing OWNER / ADMIN / MEMBER / VIEWER (AGENT_OPERATOR reserved)
+- [x] **Multi-tenancy enforcement** — Prisma Client extension injecting/validating `organizationId`; tenant resolved from the principal's active-org claim via `AsyncLocalStorage` and checked against live membership
+- [x] `audit-log` module — append-only record of security-relevant actions
+- [x] **Dashboard shell** in `apps/web` — authenticated layout, org switcher, member management + API-key screens
+- [x] `packages/ui` grew the shared components the shell needs (Input, Label, Card, Badge, Alert)
 
 ### Exit Criteria
 

@@ -4,9 +4,10 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 1 — development foundation (monorepo, API + web skeletons, health
-checks, database pipeline). Voice calling, billing, and the full dashboard arrive in
-later phases. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
+**Status:** Phase 2 complete — authentication & multi-tenant core (JWT auth with rotating
+refresh tokens, organizations, memberships + invitations, RBAC, API keys, audit log, and an
+authenticated dashboard shell) on top of the Phase 1 foundation. Voice calling, billing, and
+AI agents arrive in later phases. See [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
 ---
 
@@ -35,7 +36,11 @@ Prisma stays on stable 7.x because npm `latest` is an 8.0 release candidate).
   ```bash
   corepack enable            # or: corepack prepare pnpm@12.14.0 --activate
   ```
-- **Docker + Docker Compose** — required to run PostgreSQL and Redis locally.
+- **PostgreSQL 16+ and Redis 7** — via **Docker Compose** (`pnpm docker:up`, recommended) **or**
+  natively. Docker-free on macOS: `brew services start postgresql@17` and
+  `brew install redis && brew services start redis`, then create the role/db to match
+  `DATABASE_URL` (`psql postgres -c "CREATE ROLE ovozai LOGIN PASSWORD 'ovozai' SUPERUSER;" -c
+  "CREATE DATABASE ovozai OWNER ovozai;"`). Building and testing need no database at all.
 
 ## Quick start
 

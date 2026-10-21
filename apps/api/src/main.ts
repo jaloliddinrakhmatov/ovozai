@@ -4,10 +4,14 @@ import { ConfigService } from "@nestjs/config";
 import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
+import { requestIdMiddleware } from "./common/request-id.middleware";
 
 async function bootstrap(): Promise<void> {
   const app = await NestFactory.create(AppModule);
   const config = app.get(ConfigService);
+
+  // Correlation id on every request/response (before anything else).
+  app.use(requestIdMiddleware);
 
   // Baseline security headers.
   app.use(helmet());

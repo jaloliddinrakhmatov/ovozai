@@ -7,9 +7,19 @@
 //     apps/api PrismaService.
 //   - The generated client is emitted to ./src/generated/client (gitignored).
 //
-// Phase 1 implements only the tenancy/identity core (Organization, User,
-// Membership) — enough to exercise the migration pipeline. The full target data
-// model is documented in ../../../docs/DATABASE.md and lands in later phases.
+// Scope:
+//   - Phase 1 implemented the tenancy/identity core (Organization, User,
+//     Membership).
+//   - Phase 2 (auth + multi-tenant core) adds Session (refresh-token rotation),
+//     Invitation (invite-by-email), ApiKey, and AuditLog.
+//   The full target data model is documented in ../../../docs/DATABASE.md and the
+//   remaining entities (Agent, Call, Transcript, billing, …) land in later phases.
+//
+// ADR — primary keys: this project standardizes on Prisma-generated UUIDs
+//   (`@default(uuid())`, stored as `text`), the fallback DATABASE.md §5.1 permits
+//   when a `uuid_generate_v7()` generator is not provisioned. Phase 1 committed
+//   this choice; Phase 2 keeps it uniform rather than churn existing columns or
+//   add a DB extension. Revisit alongside the Phase 7 RLS/`@db.Uuid` hardening.
 
 generator client {
   provider = "prisma-client-js"
@@ -20,13 +30,18 @@ datasource db {
   provider = "postgresql"
 }
 
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
 /// Lifecycle state of a tenant organization.
 enum OrganizationStatus {
   ACTIVE
   SUSPENDED
 }
 
-/// Role of a user within an organization (RBAC).
+/// Role of a user within an organization (RBAC). AGENT_OPERATOR is reserved for
+/// a later phase (human live-assist) and intentionally not yet implemented.
 enum MembershipRole {
   OWNER
   ADMIN
@@ -39,6 +54,38 @@ enum UserStatus {
   ACTIVE
   DISABLED
 }
+
+/// Lifecycle state of an authentication session (refresh-token chain).
+enum SessionStatus {
+  ACTIVE
+  REVOKED
+}
+
+/// Lifecycle state of an organization-scoped API key.
+enum ApiKeyStatus {
+  ACTIVE
+  REVOKED
+  EXPIRED
+}
+
+/// Lifecycle state of a membership invitation.
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+}
+
+/// The kind of principal that performed an audited action.
+enum AuditActorType {
+  USER
+  API_KEY
+  SYSTEM
+}
+
+// ---------------------------------------------------------------------------
+// Identity & tenancy core (Phase 1)
+// ---------------------------------------------------------------------------
 
 /// A tenant. Every tenant-scoped table in later phases carries `organizationId`.
 model Organization {
@@ -53,6 +100,10 @@ model Organization {
   deletedAt DateTime?          @map("deleted_at")
 
   memberships Membership[]
+  sessions    Session[]
+  invitations Invitation[]
+  apiKeys     ApiKey[]
+  auditLogs   AuditLog[]
 
   @@map("organizations")
 }
@@ -69,7 +120,11 @@ model User {
   updatedAt      DateTime   @updatedAt @map("updated_at")
   deletedAt      DateTime?  @map("deleted_at")
 
-  memberships Membership[]
+  memberships         Membership[]
+  sessions            Session[]
+  sentInvitations     Invitation[] @relation("InvitationInvitedBy")
+  acceptedInvitations Invitation[] @relation("InvitationAcceptedBy")
+  createdApiKeys      ApiKey[]     @relation("ApiKeyCreatedBy")
 
   @@map("users")
 }
@@ -92,4 +147,118 @@ model Membership {
   @@index([organizationId])
   @@index([userId])
   @@map("memberships")
+}
+
+// ---------------------------------------------------------------------------
+// Authentication & multi-tenant core (Phase 2)
+// ---------------------------------------------------------------------------
+
+/// An authentication session: the server-side source of truth for a rotating
+/// refresh-token chain. The raw refresh token has the shape `<sessionId>.<secret>`;
+/// only a hash of `<secret>` is stored (`tokenHash`). On refresh the token is
+/// rotated (a new secret replaces `tokenHash`); presenting an already-rotated
+/// token for an ACTIVE session is treated as reuse/theft and revokes the session.
+/// Not tenant-scoped by the Prisma extension — it is keyed by user and used
+/// during authentication, before a tenant context exists. `organizationId` is the
+/// session's currently-active organization (updated by switch-org).
+model Session {
+  id             String        @id @default(uuid())
+  userId         String        @map("user_id")
+  /// The session's currently-active organization (updated by switch-org). Null
+  /// for an orgless user who has registered but not yet created or joined an org.
+  organizationId String?       @map("organization_id")
+  tokenHash      String        @unique @map("token_hash")
+  status         SessionStatus @default(ACTIVE)
+  userAgent      String?       @map("user_agent")
+  ip             String?
+  expiresAt      DateTime      @map("expires_at")
+  lastUsedAt     DateTime      @default(now()) @map("last_used_at")
+  revokedAt      DateTime?     @map("revoked_at")
+  createdAt      DateTime      @default(now()) @map("created_at")
+  updatedAt      DateTime      @updatedAt @map("updated_at")
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([organizationId])
+  @@map("sessions")
+}
+
+/// An invitation for a (possibly not-yet-registered) user to join an organization
+/// with a given role. The raw invite token is delivered out of band; only its hash
+/// is stored. A membership is created when the invite is accepted.
+model Invitation {
+  id             String           @id @default(uuid())
+  organizationId String           @map("organization_id")
+  email          String
+  role           MembershipRole   @default(MEMBER)
+  tokenHash      String           @unique @map("token_hash")
+  status         InvitationStatus @default(PENDING)
+  invitedById    String?          @map("invited_by_id")
+  acceptedById   String?          @map("accepted_by_id")
+  expiresAt      DateTime         @map("expires_at")
+  acceptedAt     DateTime?        @map("accepted_at")
+  revokedAt      DateTime?        @map("revoked_at")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    User?        @relation("InvitationInvitedBy", fields: [invitedById], references: [id], onDelete: SetNull)
+  acceptedBy   User?        @relation("InvitationAcceptedBy", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@index([organizationId, email])
+  @@map("invitations")
+}
+
+/// An organization-scoped, server-to-server credential. The raw key
+/// (`ovz_live_<prefix>.<secret>`) is shown exactly once at creation; only the
+/// `prefix` (for lookup/identification) and a hash of the secret (`hashedKey`)
+/// are stored. Tenant-scoped (enforced by the Prisma extension).
+model ApiKey {
+  id             String       @id @default(uuid())
+  organizationId String       @map("organization_id")
+  name           String
+  prefix         String       @unique
+  hashedKey      String       @map("hashed_key")
+  scopes         String[]     @default([])
+  status         ApiKeyStatus @default(ACTIVE)
+  lastUsedAt     DateTime?    @map("last_used_at")
+  expiresAt      DateTime?    @map("expires_at")
+  revokedAt      DateTime?    @map("revoked_at")
+  createdById    String?      @map("created_by_id")
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  deletedAt      DateTime?    @map("deleted_at")
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  createdBy    User?        @relation("ApiKeyCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([organizationId])
+  @@map("api_keys")
+}
+
+/// Append-only security/compliance audit trail. `organizationId` is nullable for
+/// platform-level actions (e.g. a login before an org is resolved). Written by a
+/// system-level writer with an explicit org, so it is intentionally NOT in the
+/// Prisma extension's tenant-scoped set (which requires a non-null org context).
+model AuditLog {
+  id             String         @id @default(uuid())
+  organizationId String?        @map("organization_id")
+  actorType      AuditActorType @default(USER) @map("actor_type")
+  actorId        String?        @map("actor_id")
+  action         String
+  targetType     String?        @map("target_type")
+  targetId       String?        @map("target_id")
+  metadata       Json?
+  ip             String?
+  createdAt      DateTime       @default(now()) @map("created_at")
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId])
+  @@index([organizationId, action])
+  @@index([actorId])
+  @@map("audit_logs")
 }

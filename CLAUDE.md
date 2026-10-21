@@ -10,8 +10,9 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 1 (development foundation)**. Do not build voice calling, billing, or
-the advanced dashboard yet. Scope and sequencing live in `docs/ROADMAP.md`. Full design is in
+Current stage: **Phase 2 complete** (auth + multi-tenant core) — **Phase 3 is next and gated:
+do not start it without explicit approval.** Do not build AI agents, the knowledge base, voice
+calling, or billing yet. Scope and sequencing live in `docs/ROADMAP.md`. Full design is in
 `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
 
 ## Toolchain & commands
@@ -21,6 +22,11 @@ the advanced dashboard yet. Scope and sequencing live in `docs/ROADMAP.md`. Full
 - Node ≥ 20.9 (dev on 24). Versions are centralized in the **catalog** in
   `pnpm-workspace.yaml`; packages reference deps as `"catalog:"` / `"workspace:*"`.
   Add/upgrade a shared version in the catalog, not in individual package.json files.
+- **Docker is optional.** `pnpm docker:up` is the convenient path, but PostgreSQL + Redis can
+  come from anywhere. Docker-free local dev (macOS/Homebrew): `brew services start postgresql@17`,
+  `brew install redis && brew services start redis`, then create the role/db to match
+  `DATABASE_URL` (`CREATE ROLE ovozai LOGIN PASSWORD 'ovozai' SUPERUSER; CREATE DATABASE ovozai
+  OWNER ovozai;`). The build/typecheck/lint/test pipeline and the API boot need no DB at all.
 
 ```bash
 pnpm install                 # if it stops on build scripts: pnpm approve-builds --all
@@ -78,6 +84,22 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
 - **NestJS DI needs value imports** of injected classes (for decorator metadata), so
   `@typescript-eslint/consistent-type-imports` is turned off in `apps/api/eslint.config.mjs`.
   Don't convert injected constructor params to `import type`.
+- **`PrismaService` exposes two clients (Phase 2).** `prisma.tenant` auto-scopes tenant-bound
+  models to the active org via the Prisma extension (`src/tenancy/`), keyed off an
+  `AsyncLocalStorage` context set per request by `TenantInterceptor` from the authenticated
+  principal. `prisma.base` is unscoped — use it only for global models (User, Organization,
+  Membership, Session, AuditLog) and bootstrap ops that precede a tenant context (login,
+  invite-accept-by-token, API-key verification). On a tenant-scoped model the extension
+  **forbids** `findUnique`/`update`/`delete`/`upsert` (their `where` can't carry the tenant
+  filter) — use `findFirst`/`updateMany`/`deleteMany` instead. The scoped set is in
+  `tenant.extension.ts` and grows as later phases add tenant tables.
+- **Auth model (Phase 2).** Short-lived access JWT (HS256, `JWT_ACCESS_SECRET`) + opaque
+  rotating refresh token `<sessionId>.<secret>` backed by the `Session` row (reuse of a rotated
+  token revokes the session). Passwords use **argon2id**. Global guards live in `AuthModule`
+  (`APP_GUARD`): `JwtAuthGuard` (skip with `@Public()`), then `RolesGuard` (`@Roles(minRole)`,
+  deny-by-default, hierarchy-aware). Errors are RFC 9457 problem+json via `ProblemDetailsFilter`;
+  validate input with `new ZodValidationPipe(schema)` against `@ovozai/contracts`. Redis-backed
+  rate-limit + session denylist are best-effort (fail open) so the API still boots without Redis.
 
 ## Verifying a change
 

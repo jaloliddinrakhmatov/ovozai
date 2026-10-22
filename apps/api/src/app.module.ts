@@ -25,6 +25,9 @@ import { WerModule } from "./wer/wer.module";
 import { BillingModule } from "./billing/billing.module";
 import { IntegrationsModule } from "./integrations/integrations.module";
 import { NotificationsModule } from "./notifications/notifications.module";
+import { ComplianceModule } from "./compliance/compliance.module";
+import { MetricsModule } from "./metrics/metrics.module";
+import { HttpMetricsInterceptor } from "./metrics/http-metrics.interceptor";
 
 @Module({
   imports: [
@@ -54,12 +57,16 @@ import { NotificationsModule } from "./notifications/notifications.module";
     BillingModule,
     IntegrationsModule,
     NotificationsModule,
+    ComplianceModule,
+    MetricsModule,
     InternalModule,
     HealthModule,
   ],
   providers: [
     // RFC 9457 problem+json for every error (preserves the Terminus health body).
     { provide: APP_FILTER, useClass: ProblemDetailsFilter },
+    // Outermost interceptor: time every request into the metrics registry.
+    { provide: APP_INTERCEPTOR, useClass: HttpMetricsInterceptor },
     // Bind the authenticated principal's org into the tenant context per request.
     { provide: APP_INTERCEPTOR, useClass: TenantInterceptor },
   ],

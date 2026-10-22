@@ -5,12 +5,22 @@ import { NestFactory } from "@nestjs/core";
 import helmet from "helmet";
 import { AppModule } from "./app.module";
 import { requestIdMiddleware } from "./common/request-id.middleware";
+import { StructuredLogger } from "./common/structured-logger";
 
 async function bootstrap(): Promise<void> {
   // rawBody is required so the internal channel can verify the HMAC signature
   // over the exact request bytes.
   const app = await NestFactory.create(AppModule, { rawBody: true });
   const config = app.get(ConfigService);
+
+  // Observability (Phase 7): structured, PII-redacted JSON logs for aggregation.
+  // LOG_FORMAT=json forces it; otherwise it is the default only in production.
+  const logFormat =
+    config.get<string>("LOG_FORMAT") ??
+    (config.get<string>("NODE_ENV") === "production" ? "json" : "pretty");
+  if (logFormat === "json") {
+    app.useLogger(new StructuredLogger());
+  }
 
   // Correlation id on every request/response (before anything else).
   app.use(requestIdMiddleware);

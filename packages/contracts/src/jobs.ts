@@ -5,6 +5,7 @@ export const JOB_QUEUES = {
   embedding: "embedding",
   webhook: "webhook",
   usageRollup: "usage-rollup",
+  retention: "retention",
 } as const;
 export type JobQueue = (typeof JOB_QUEUES)[keyof typeof JOB_QUEUES];
 
@@ -38,3 +39,13 @@ export const usageRollupJobSchema = z.object({
   periodKey: z.string().min(1).max(20),
 });
 export type UsageRollupJob = z.infer<typeof usageRollupJobSchema>;
+
+/** Stable job name within the retention queue. */
+export const RETENTION_SWEEP_JOB_NAME = "sweep-retention" as const;
+
+/** Payload for a retention-sweep job: purge expired recordings/transcripts for
+ *  one organization according to its retention policy. */
+export const retentionSweepJobSchema = z.object({
+  organizationId: z.uuid(),
+});
+export type RetentionSweepJob = z.infer<typeof retentionSweepJobSchema>;

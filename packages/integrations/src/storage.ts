@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
@@ -14,6 +14,9 @@ export interface StorageProvider {
   put(key: string, data: Uint8Array, contentType?: string): Promise<void>;
   /** A retrievable URL for the object, or null if unavailable. */
   getUrl(key: string, expiresInSeconds?: number): Promise<string | null>;
+  /** Permanently remove an object (idempotent — deleting a missing key is a
+   *  no-op). Used by data-retention sweeps and right-to-erasure (Phase 7). */
+  delete(key: string): Promise<void>;
 }
 
 /** Writes objects under a base directory. getUrl returns a `file://` URL. */
@@ -29,6 +32,10 @@ export class LocalFsStorageProvider implements StorageProvider {
 
   async getUrl(key: string): Promise<string | null> {
     return `file://${resolve(join(this.baseDir, key))}`;
+  }
+
+  async delete(key: string): Promise<void> {
+    await rm(join(this.baseDir, key), { force: true });
   }
 }
 
@@ -58,6 +65,13 @@ export class S3StorageProvider implements StorageProvider {
 
   async getUrl(): Promise<string | null> {
     return null;
+  }
+
+  async delete(): Promise<void> {
+    throw new Error(
+      `S3 storage (bucket ${this.config.bucket}) is not wired in this build. ` +
+        "Add an S3 client (DeleteObject) to implement delete (see docs/VOICE_PIPELINE.md §8).",
+    );
   }
 }
 

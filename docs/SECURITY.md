@@ -131,10 +131,14 @@ depth:
    `organizationId` on reads and writes for tenant-scoped models, so application queries cannot
    accidentally span tenants. The tenant context is derived from the authenticated principal, not
    from user input.
-3. **PostgreSQL Row-Level Security (RLS) — Phase 7 defense-in-depth.** RLS policies keyed on the
-   session's org enforce isolation *at the database* even if an application query is wrong. This
-   is the belt-and-suspenders layer added in Phase 7 (see §14 and [ROADMAP.md](./ROADMAP.md)); it
-   does not replace the application-layer guard, it backstops it.
+3. **PostgreSQL Row-Level Security (RLS) — Phase 7 defense-in-depth (implemented).** Every one of
+   the 22 tenant-scoped tables has a `tenant_isolation` policy keyed on the transaction-local GUC
+   `app.current_org` (set via `PrismaService.runWithOrgScope`). A dedicated least-privilege role
+   `ovozai_app` — neither superuser nor table owner — has RLS **enforced**, so isolation holds *at
+   the database* even if an application query is wrong. Verified by connecting as `ovozai_app` with
+   the app guard entirely bypassed: a foreign-org context returns zero rows and cross-tenant inserts
+   are rejected by `WITH CHECK`. It backstops — does not replace — the application-layer guard. See
+   [COMPLIANCE.md §1](./COMPLIANCE.md) and `infrastructure/rls/create-app-role.sql`.
 4. **Guard against IDOR / cross-tenant access.** Every object lookup is scoped by
    `organizationId`; never fetch by primary key alone for tenant-scoped resources. Return 404 (not
    403) for objects outside the tenant to avoid existence leaks.
@@ -227,15 +231,21 @@ Data" (No. ZRU-547)** a **hard architectural constraint**, not a policy footnote
 
 ## 8. Retention & deletion
 
-- **Configurable retention** for recordings and transcripts, per tenant/policy (e.g. N days, then
-  purge). Defaults should favor minimization.
-- **Hard-delete workflows.** Deletion removes data from the primary DB **and** object storage
-  (not just a soft-delete flag), including backups per the backup retention policy.
-- **Right to erasure.** A data-subject erasure request triggers the hard-delete workflow across
-  all stores and derived artifacts (transcripts, embeddings, recordings).
-- **Audit of deletions.** Every deletion (manual, retention-driven, or erasure) is recorded in the
-  **`AuditLog`** (who/what/when/why) so deletions are provable without retaining the deleted PII
-  itself. See `AuditLog` in [DATABASE.md](./DATABASE.md).
+> **Implemented in Phase 7** — see [COMPLIANCE.md §3](./COMPLIANCE.md). Code:
+> `apps/api/src/compliance/` + `apps/jobs-worker/src/retention-sweep-processor.ts`.
+
+- **Configurable retention** for recordings and transcripts, per organization
+  (`Organization.recordingRetentionDays` / `transcriptRetentionDays`; `null` = retain
+  indefinitely), set via `PUT /api/v1/compliance/retention` (OWNER). Defaults favor minimization.
+- **Retention sweep.** `POST /api/v1/compliance/retention/sweep` enqueues a BullMQ job; the
+  jobs-worker deletes recording objects **and** transcript content older than the policy while
+  retaining the call ledger row (billing integrity) with its content purged. Schedule from cron.
+- **Right to erasure.** `POST /api/v1/compliance/erasure` (OWNER) hard-deletes a data subject's
+  transcripts + recordings, strips PII from retained call rows, and anonymizes the customer record.
+  (Knowledge embeddings are not tied to a customer, so they are out of a per-customer erasure.)
+- **Audit of deletions.** Erasure and retention-policy changes are recorded in the **`AuditLog`**
+  (`customer.erased`, `retention.policy.updated`) with the removed-item counts, so deletions are
+  provable without retaining the deleted PII itself.
 
 ---
 
@@ -369,14 +379,18 @@ features are built on a secure baseline.
 
 ### Phase 7 — Data residency & defense-in-depth
 
-- [ ] **PostgreSQL Row-Level Security** as a second isolation layer (§4).
-- [ ] **Data residency** enforced: in-country storage/processing; provider regions constrained;
-      operator registered in the State Register (§7).
-- [ ] Field-level encryption / phone-number tokenization for the most sensitive fields (§6).
-- [ ] Configurable retention + hard-delete + right-to-erasure workflows with deletion audit
-      (§8).
-- [ ] Backup + **tested restore**; incident-response runbook; responsible-disclosure contact
-      live (§12).
+- [x] **PostgreSQL Row-Level Security** as a second isolation layer — 22 tables, enforced
+      `ovozai_app` role, verified cross-tenant block with the app guard bypassed (§4, COMPLIANCE §1).
+- [~] **Data residency**: PII-store inventory + `DATA_REGION` self-report shipped; in-country
+      placement + State-Register operator registration are deployment/legal steps (§7, COMPLIANCE §2).
+- [x] Phone-number **tokenization on erasure** (`erased:<id>`); field-level encryption of the most
+      sensitive at-rest fields remains a deployment-KMS follow-on (§6).
+- [x] Configurable retention + hard-delete + **right-to-erasure** workflows with deletion audit
+      (§8, COMPLIANCE §3).
+- [x] **Observability**: Prometheus `/metrics` + structured, correlated, PII-redacted logs
+      (COMPLIANCE §5); [~] tracing export + SLO alerting are monitoring-stack steps.
+- [x] Dependency audit clean (`pnpm audit`, prod+dev); [~] backup/restore drills, IR runbook,
+      external pentest, and SOC2 evidence run against an operated deployment (§12, COMPLIANCE §6–7).
 
 ---
 
@@ -386,4 +400,5 @@ features are built on a secure baseline.
 - `organizationId`, `Integration.secretRef`, `AuditLog`, cascade deletes → [DATABASE.md](./DATABASE.md)
 - Guards, auth endpoints, rate limits, webhook signing → [API.md](./API.md)
 - Consent, SRTP, internal channel, region pinning → [VOICE_PIPELINE.md](./VOICE_PIPELINE.md)
+- RLS, retention/erasure, observability, residency, SOC2 controls (Phase 7) → [COMPLIANCE.md](./COMPLIANCE.md)
 - Phase mapping for the checklist → [ROADMAP.md](./ROADMAP.md)

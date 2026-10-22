@@ -9,19 +9,35 @@
  */
 
 import { Worker, type Job } from "bullmq";
-import { JOB_QUEUES, embeddingJobSchema, usageRollupJobSchema, webhookJobSchema } from "@ovozai/contracts";
+import {
+  JOB_QUEUES,
+  embeddingJobSchema,
+  retentionSweepJobSchema,
+  usageRollupJobSchema,
+  webhookJobSchema,
+} from "@ovozai/contracts";
+import { createStorageProvider } from "@ovozai/integrations";
 import { getRedisConnectionOptions } from "./redis-connection";
 import { createPrismaClient, loadWorkerEnv } from "./db";
 import { createEmbedderFromEnv } from "./embedder";
 import { processEmbeddingJob } from "./embedding-processor";
 import { processWebhookJob } from "./webhook-processor";
 import { processUsageRollupJob } from "./usage-rollup-processor";
+import { processRetentionSweepJob } from "./retention-sweep-processor";
 
 loadWorkerEnv();
 
 const concurrency = Number(process.env.JOBS_WORKER_CONCURRENCY ?? 5);
 const prisma = createPrismaClient();
 const embedder = createEmbedderFromEnv();
+// Storage for retention sweeps; must match the api/voice-worker config (Phase 7).
+const storage = createStorageProvider({
+  provider: (process.env.STORAGE_PROVIDER as "local" | "s3") ?? "local",
+  baseDir: process.env.STORAGE_LOCAL_DIR,
+  bucket: process.env.STORAGE_S3_BUCKET,
+  region: process.env.STORAGE_S3_REGION,
+  endpoint: process.env.STORAGE_S3_ENDPOINT,
+});
 
 console.info("────────────────────────────────────────────────────────");
 console.info(" OvozAI jobs-worker started");
@@ -87,6 +103,20 @@ usageWorker.on("failed", (job, error) =>
   console.error("[jobs-worker] usage job %s failed:", job?.id ?? "<unknown>", error.message),
 );
 
+const retentionWorker = new Worker(
+  JOB_QUEUES.retention,
+  async (job: Job) => {
+    const data = retentionSweepJobSchema.parse(job.data);
+    return processRetentionSweepJob({ prisma, storage }, data);
+  },
+  { connection: getRedisConnectionOptions(), concurrency },
+);
+retentionWorker.on("error", (error) => console.error("[jobs-worker] retention worker error:", error.message));
+retentionWorker.on("completed", (job) => console.info("[jobs-worker] retention job %s completed", job.id ?? "<?>"));
+retentionWorker.on("failed", (job, error) =>
+  console.error("[jobs-worker] retention job %s failed:", job?.id ?? "<unknown>", error.message),
+);
+
 let shuttingDown = false;
 async function shutdown(signal: NodeJS.Signals): Promise<void> {
   if (shuttingDown) return;
@@ -96,6 +126,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
     await worker.close();
     await webhookWorker.close();
     await usageWorker.close();
+    await retentionWorker.close();
     await prisma.$disconnect();
   } catch (error) {
     console.error("[jobs-worker] shutdown error:", error instanceof Error ? error.message : error);

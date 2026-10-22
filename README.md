@@ -4,15 +4,19 @@
 > that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
 > knowledge base, book appointments, and transfer calls to human staff.
 
-**Status:** Phase 6 complete — Billing & integrations: a plan catalog, subscriptions with
-plan-limit enforcement, usage metering + rollups, business integrations (calendar sync, CRM
-interface), and notifications — on top of the Phase 1–5 platform (auth, multi-tenancy, RBAC,
-AI agents, knowledge base, the Voice MVP, and telephony productionization). **External provider
-infra is not wired in this environment** — payments (Stripe), calendar (Google), CRM, email/SMS,
-a real SIP trunk / Uzbekistan numbers, the LiveKit audio hop, and real S3 all sit behind
-interfaces with **mock/local defaults**; the flows are verified via simulated calls + local
-providers (see [`docs/ROADMAP.md`](docs/ROADMAP.md)). Phase 7 (hardening & compliance) is the
-remaining phase. Running the full stack (`pnpm dev`) needs PostgreSQL + Redis up.
+**Status:** Phase 7 complete — **all roadmap phases delivered.** Hardening & compliance adds
+PostgreSQL **Row-Level Security** (defense-in-depth tenant isolation, verified cross-tenant block
+even with the app guard bypassed), **data retention + right-to-erasure** (audited), and
+**observability** (a Prometheus `/metrics` endpoint + structured, PII-redacted, correlated JSON
+logs) — on top of the Phase 1–6 platform (auth, multi-tenancy, RBAC, AI agents, knowledge base,
+the Voice MVP, telephony, and billing + integrations). **External provider infra is not wired in
+this environment** — payments (Stripe), calendar (Google), CRM, email/SMS, a real SIP trunk /
+Uzbekistan numbers, the LiveKit audio hop, and real S3 sit behind interfaces with **mock/local
+defaults**; and the deployment/policy controls (in-country data residency, at-scale load numbers,
+external penetration test, SOC2 evidence) are **documented boundaries** in
+[`docs/COMPLIANCE.md`](docs/COMPLIANCE.md). Flows are verified via simulated calls + local
+providers and live smokes (see [`docs/ROADMAP.md`](docs/ROADMAP.md)). Running the full stack
+(`pnpm dev`) needs PostgreSQL + Redis up.
 
 ---
 
@@ -151,6 +155,7 @@ You can target a single workspace with `pnpm --filter <name> <script>`, e.g.
 | [`docs/API.md`](docs/API.md) | REST conventions, auth, errors, endpoint catalog |
 | [`docs/VOICE_PIPELINE.md`](docs/VOICE_PIPELINE.md) | Real-time call flow, providers, latency |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | AuthN/Z, tenant isolation, Uzbekistan data residency |
+| [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) | Phase 7: RLS, retention/erasure, observability, residency, load, SOC2 controls |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased delivery plan |
 
 ## Troubleshooting

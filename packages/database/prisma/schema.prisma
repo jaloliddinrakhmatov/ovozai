@@ -236,6 +236,10 @@ model Organization {
   status    OrganizationStatus @default(ACTIVE)
   /// Default BCP-47 locale for the org (e.g. "uz", "ru", "en").
   locale    String             @default("uz")
+  /// Data-retention policy (Phase 7). Max age in days before call recordings /
+  /// transcript content are purged by the retention sweep; null = retain forever.
+  recordingRetentionDays  Int?     @map("recording_retention_days")
+  transcriptRetentionDays Int?     @map("transcript_retention_days")
   createdAt DateTime           @default(now()) @map("created_at")
   updatedAt DateTime           @updatedAt @map("updated_at")
   deletedAt DateTime?          @map("deleted_at")

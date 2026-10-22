@@ -54,6 +54,25 @@ const envSchema = z
     STORAGE_S3_BUCKET: z.string().optional(),
     STORAGE_S3_REGION: z.string().optional(),
     STORAGE_S3_ENDPOINT: z.string().optional(),
+
+    // --- Hardening & compliance (Phase 7) ---
+    /** RLS-enforced connection string: a non-superuser role (`ovozai_app`) for
+     *  which Row-Level Security applies. When set, PrismaService.runWithOrgScope
+     *  routes through it as defense-in-depth. Unset → falls back to DATABASE_URL
+     *  (dev: the owner role bypasses RLS; the app-layer guard remains primary). */
+    DATABASE_APP_URL: z.string().optional(),
+    /** Log output format. "json" emits structured, PII-redacted lines for log
+     *  aggregation; "pretty" is the human-readable Nest logger. Defaults to json
+     *  in production, pretty otherwise. */
+    LOG_FORMAT: z.enum(["json", "pretty"]).optional(),
+    /** Expose the Prometheus metrics endpoint at GET /metrics. */
+    METRICS_ENABLED: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((v) => v === "true"),
+    /** Data-residency region of the PII-bearing stores (Law No. ZRU-547).
+     *  Surfaced on readiness/metrics for auditability; "uz" = in-country. */
+    DATA_REGION: z.string().default("uz"),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {

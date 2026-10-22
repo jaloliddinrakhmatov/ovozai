@@ -26,6 +26,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: "/dashboard/billing", label: "Billing" },
   { href: "/dashboard/integrations", label: "Integrations" },
   { href: "/dashboard/notifications", label: "Notifications" },
+  { href: "/dashboard/compliance", label: "Compliance" },
 ];
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {

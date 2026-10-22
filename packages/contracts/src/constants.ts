@@ -115,6 +115,14 @@ export const API_ROUTES = {
   notifications: {
     root: `${API_BASE_PATH}/notifications`,
   },
+  compliance: {
+    retention: `${API_BASE_PATH}/compliance/retention`,
+    rlsStatus: `${API_BASE_PATH}/compliance/rls-status`,
+    erasure: `${API_BASE_PATH}/compliance/erasure`,
+    retentionSweep: `${API_BASE_PATH}/compliance/retention/sweep`,
+  },
+  /** Prometheus metrics exposition (unauthenticated; scraped by Prometheus). */
+  metrics: `${API_BASE_PATH}/metrics`,
 } as const;
 
 /** Internal voice-worker ↔ API routes (service-token + HMAC authenticated). */

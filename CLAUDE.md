@@ -10,10 +10,12 @@ book appointments, and transfer to humans. Architecture: a NestJS **modular mono
 (`apps/api`) + a separately deployable **real-time voice worker** (`apps/voice-worker`) +
 a **BullMQ jobs worker** (`apps/jobs-worker`) + a **Next.js** frontend (`apps/web`).
 
-Current stage: **Phase 6 complete** (billing + integrations; also Phases 1–5) — **Phase 7
-(hardening & compliance: RLS, data residency, retention, observability, load, security audit) is
-next and gated: do not start it without explicit approval.** Scope and sequencing live in
-`docs/ROADMAP.md`. Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE, SECURITY).
+Current stage: **Phase 7 complete** (hardening & compliance; also Phases 1–6) — **all roadmap
+phases are delivered.** Phase 7 shipped the codeable/verifiable controls (RLS, retention +
+right-to-erasure, observability) and documented the infra/policy boundaries (in-country residency,
+at-scale load, external pentest, SOC2 evidence) in `docs/COMPLIANCE.md`. Scope and sequencing live
+in `docs/ROADMAP.md`. Full design is in `docs/` (ARCHITECTURE, DATABASE, API, VOICE_PIPELINE,
+SECURITY, COMPLIANCE).
 
 > Phases 4–5 note: the voice loop is verified via a **simulated (text-driven) call**. The parts
 > that need external infra are built behind interfaces but **not exercised here**: the live
@@ -151,6 +153,23 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   `WebhooksService.dispatch` — all use the base client with an explicit org so they work in and out
   of request context. Business providers (`createPaymentProvider`/`createCalendarProvider`/
   `createNotificationProvider`) default to mock; real adapters are documented boundaries.
+- **Hardening & compliance (Phase 7).** **RLS** is defense-in-depth *behind* the Phase-2 tenant
+  extension (still the primary guard). The migration `..._phase7_rls` enables RLS + a
+  `tenant_isolation` policy (keyed on the GUC `app.current_org`) on all 22 tenant tables; the
+  enforced role `ovozai_app` is created **out of band** by `infrastructure/rls/create-app-role.sql`
+  (a superuser op — NOT in the Prisma migration, which can't/shouldn't `CREATE ROLE`). The dev app
+  still connects as the owner (bypasses RLS); set `DATABASE_APP_URL` to the `ovozai_app` connection
+  to activate the enforced path. `PrismaService` gains `enforced` + `runWithOrgScope(org, fn)`
+  (wraps a tx in `set_config('app.current_org', …, true)`) and `rlsEnforced`. Verify RLS directly:
+  `SET ROLE ovozai_app; SET app.current_org='…'; SELECT …` (foreign org → 0 rows). **Retention +
+  erasure** live in `apps/api/src/compliance/` (per-org `recording/transcriptRetentionDays` on
+  Organization; `POST /compliance/erasure` is synchronous + audited; `POST /compliance/retention/
+  sweep` enqueues the `retention` BullMQ queue → `apps/jobs-worker` purges via `StorageProvider`
+  (now has `delete`) + Prisma). **Observability**: `GET /api/v1/metrics` (Prometheus, no
+  prom-client dep) via `MetricsModule` + a global `HttpMetricsInterceptor`; `LOG_FORMAT=json` swaps
+  in `StructuredLogger` (per-request `requestId` via an `AsyncLocalStorage` set in the request-id
+  middleware; every line PII-redacted via `common/redaction.ts`). Infra/policy items (residency
+  placement, at-scale load, pentest, SOC2) are documented boundaries in `docs/COMPLIANCE.md`.
 
 ## Verifying a change
 

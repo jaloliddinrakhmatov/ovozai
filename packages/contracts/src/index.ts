@@ -21,4 +21,5 @@ export * from "./wer";
 export * from "./billing";
 export * from "./integration";
 export * from "./notification";
+export * from "./compliance";
 export * from "./jobs";

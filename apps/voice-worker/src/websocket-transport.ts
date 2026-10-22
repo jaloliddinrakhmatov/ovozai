@@ -1,4 +1,4 @@
-import { audioToText, textToAudio, type AudioChunk } from "@ovozai/integrations";
+import { textToAudio, type AudioChunk } from "@ovozai/integrations";
 import type { VoiceClientMessage, VoiceServerMessage } from "@ovozai/contracts";
 import type { WebSocket } from "ws";
 import type { AudioTransport, CallerTurn, PlaybackResult } from "./transport";
@@ -21,7 +21,12 @@ export class WebSocketTransport implements AudioTransport {
   private closed = false;
   private bargeRequested = false;
 
-  constructor(private readonly ws: WebSocket) {
+  constructor(
+    private readonly ws: WebSocket,
+    /** When true, the agent's synthesized audio (e.g. NeuronAI WAV) is forwarded
+     *  to the browser to play; otherwise the browser speaks the text itself. */
+    private readonly serverAudio = false,
+  ) {
     ws.on("message", (raw: unknown) => this.onMessage(raw));
     ws.on("close", () => this.finish());
     ws.on("error", () => this.finish());
@@ -44,9 +49,9 @@ export class WebSocketTransport implements AudioTransport {
       case "caller_text": {
         const text = (message.text ?? "").toString().trim();
         if (!text) return;
-        this.send({ type: "caption", role: "CALLER", text, language: message.language });
-        // Pass the text through directly (skip server STT) and still provide
-        // dev-bridge audio for providers that expect an audio stream.
+        // Caption is emitted from the session's transcript callback (so it is
+        // provider-agnostic). Pass the text through directly (skip server STT),
+        // still providing dev-bridge audio for providers that expect a stream.
         this.enqueue({ audio: this.oneUtterance(text), language: message.language, text });
         return;
       }
@@ -99,7 +104,7 @@ export class WebSocketTransport implements AudioTransport {
     controller: AbortController,
   ): Promise<PlaybackResult> {
     this.bargeRequested = false;
-    const parts: string[] = [];
+    const chunks: Uint8Array[] = [];
     let bargedIn = false;
     for await (const chunk of audio) {
       if (this.bargeRequested) {
@@ -107,12 +112,24 @@ export class WebSocketTransport implements AudioTransport {
         bargedIn = true;
         break;
       }
-      parts.push(audioToText(chunk));
+      chunks.push(chunk.data);
     }
-    const text = parts.join("").trim();
-    if (text) {
-      this.send({ type: "caption", role: "AGENT", text });
-      this.send({ type: "agent_audio_text", text });
+    if (bargedIn || chunks.length === 0) return { bargedIn };
+
+    if (this.serverAudio) {
+      // Real synthesized audio (e.g. NeuronAI WAV) → play in the browser.
+      const total = chunks.reduce((n, c) => n + c.length, 0);
+      const merged = new Uint8Array(total);
+      let offset = 0;
+      for (const c of chunks) {
+        merged.set(c, offset);
+        offset += c.length;
+      }
+      this.send({ type: "agent_audio", mime: "audio/wav", dataBase64: Buffer.from(merged).toString("base64") });
+    } else {
+      // Dev-bridge: the "audio" carries the spoken text; the browser speaks it.
+      const text = chunks.map((c) => new TextDecoder().decode(c)).join("").trim();
+      if (text) this.send({ type: "agent_audio_text", text });
     }
     return { bargedIn };
   }

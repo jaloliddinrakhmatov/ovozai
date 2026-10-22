@@ -18,7 +18,7 @@ export interface VoiceWorkerConfig {
    *  real OpenAI-compatible LLM (e.g. Groq) with local/browser STT + TTS. */
   sttProvider?: "local" | "openai";
   llmProvider?: "local" | "openai";
-  ttsProvider?: "local" | "openai";
+  ttsProvider?: "local" | "openai" | "neuronai";
   providerApiKey?: string;
   providerBaseUrl?: string;
   /** Per-modality credentials (default to providerApiKey/providerBaseUrl), so a
@@ -53,7 +53,14 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     voiceProvider: process.env.VOICE_PROVIDER === "openai" ? "openai" : "local",
     sttProvider: process.env.VOICE_STT_PROVIDER === "openai" ? "openai" : process.env.VOICE_STT_PROVIDER === "local" ? "local" : undefined,
     llmProvider: process.env.VOICE_LLM_PROVIDER === "openai" ? "openai" : process.env.VOICE_LLM_PROVIDER === "local" ? "local" : undefined,
-    ttsProvider: process.env.VOICE_TTS_PROVIDER === "openai" ? "openai" : process.env.VOICE_TTS_PROVIDER === "local" ? "local" : undefined,
+    ttsProvider:
+      process.env.VOICE_TTS_PROVIDER === "neuronai"
+        ? "neuronai"
+        : process.env.VOICE_TTS_PROVIDER === "openai"
+          ? "openai"
+          : process.env.VOICE_TTS_PROVIDER === "local"
+            ? "local"
+            : undefined,
     providerApiKey: process.env.VOICE_PROVIDER_API_KEY,
     providerBaseUrl: process.env.VOICE_PROVIDER_BASE_URL,
     sttApiKey: process.env.VOICE_STT_API_KEY,

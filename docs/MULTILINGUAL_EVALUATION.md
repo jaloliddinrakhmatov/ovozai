@@ -126,7 +126,9 @@ with the date, provider versions, and dataset hash.
 | **Per-modality provider config** (`createVoiceProviders` + env) | ✅ built |
 | **Free real LLM via Groq** (`qwen/qwen3.8-27b`, OpenAI-compatible) | ✅ **wired + live-verified** (browser Test Agent answered a real question through Groq) |
 | Browser STT + TTS (free Web Speech API, Chrome) | ✅ in the Test-Agent page |
-| Google Chirp / ElevenLabs / Mohir server-side adapters | ⬚ to build (needs the chosen provider **API keys**) |
+| **NeuronAI native Uzbek TTS** (voice `kamron`) + server→browser WAV streaming | ✅ **wired + live-verified** (per-modality providers) |
+| **NeuronAI LLM** (`gemma-4-26b-a4b`, OpenAI-compatible, Uzbek) | ✅ wired + live-verified |
+| Google Chirp / ElevenLabs / Mohir server-side STT adapters | ⬚ to build (needs the chosen provider **API keys**) |
 | `computeCer` + metric additions | ◐ small, buildable now |
 | Labeled UZ/RU/EN corpus with verified references | ⬚ needs recording + human verification |
 | Real measured WER/CER/latency numbers | ⛔ **blocked** on server STT keys + the corpus — **not** fabricated here |

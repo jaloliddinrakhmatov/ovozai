@@ -14,7 +14,7 @@ export interface AudioChunk {
   /** Sample rate in Hz (e.g. 8000 for PSTN, 16000/48000 for wideband). */
   sampleRate: number;
   /** Encoding of `data`. */
-  encoding: "pcm16" | "opus" | "mulaw";
+  encoding: "pcm16" | "opus" | "mulaw" | "wav";
 }
 
 /** Common shape for a streaming provider result with a terminal signal. */

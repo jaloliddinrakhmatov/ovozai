@@ -15,11 +15,11 @@
 | **Ticketed auth** (API-issued, HMAC-signed, short-lived) | ✅ |
 | Real **CallSession** (greeting, tools, transcript, lifecycle, barge-in) | ✅ |
 | **Type-to-talk** conversation through the real loop | ✅ works now |
-| **Real LLM responses** (Groq, free) | ✅ with a free Groq key (§5) |
+| **Real LLM** (Groq *or* NeuronAI, Uzbek) | ✅ with an API key (§5) |
 | **Microphone speech-to-text** (browser Web Speech, Chrome) | ✅ free, in-browser |
-| **Spoken replies** (browser Web Speech TTS) | ✅ free, in-browser |
+| **Native Uzbek voice** (NeuronAI TTS, streamed to the browser) | ✅ with a NeuronAI key (§5) |
+| **Free spoken replies** (browser Web Speech TTS) | ✅ fallback when no TTS provider |
 | Call record + transcript in the dashboard | ✅ |
-| **Server-side** STT/TTS for higher Uzbek quality | ⚠️ optional, needs a provider key (§5) |
 
 The default providers are a **deterministic dev-bridge, not real speech**
 (`packages/integrations/src/providers-local.ts`). Type-to-talk exercises the entire
@@ -97,11 +97,34 @@ Setup (one free key):
 3. Restart the voice-worker. On the Test page, click **🎤 Speak** (grant mic) or type,
    and keep **Speak responses** on to hear replies.
 
-> The browser's STT/TTS Uzbek quality varies. For production-grade Uzbek, add a
-> **server-side** STT/TTS provider (Google Chirp, Groq Whisper, Mohir.ai, ElevenLabs) —
-> `createVoiceProviders` already supports per-modality providers (`VOICE_STT_PROVIDER` /
-> `VOICE_TTS_PROVIDER` + models); implement/point the adapter and stream audio over the
-> existing WS protocol. See [`MULTILINGUAL_EVALUATION.md`](./MULTILINGUAL_EVALUATION.md).
+### Native Uzbek voice via NeuronAI (recommended for Uzbek)
+
+The browser's free TTS mangles Uzbek. **NeuronAI** provides a natural Uzbek voice
+(and an OpenAI-compatible LLM) on one key. Wired end-to-end: the worker synthesizes
+WAV and streams it to the browser to play (replacing the browser voice).
+
+1. Sign up at **my.neuronai.uz → API keys**, create a key (`nai_…`). You get free
+   starter credits (TTS ≈ 0.3 credits/char).
+2. In `.env`:
+   ```
+   # LLM (NeuronAI, OpenAI-compatible) — or keep Groq for better tool-calling
+   VOICE_LLM_PROVIDER=openai
+   VOICE_LLM_BASE_URL=https://my.neuronai.uz/api/v1
+   VOICE_LLM_API_KEY=nai_...
+   VOICE_LLM_MODEL=gemma-4-26b-a4b
+   # Native Uzbek TTS
+   VOICE_TTS_PROVIDER=neuronai
+   VOICE_TTS_BASE_URL=https://my.neuronai.uz/api/v1
+   VOICE_TTS_API_KEY=nai_...
+   VOICE_TTS_MODEL=kamron      # uz: kamron, madina, saodat, kamola, muhriddin
+   ```
+3. Restart the voice-worker. The Test page shows **🔊 Native voice** and plays
+   NeuronAI's audio; the browser's own TTS is disabled.
+
+> Tool-calling (booking/knowledge) is more reliable on Groq's `qwen` than NeuronAI's
+> `gemma` — a common setup is **Groq LLM + NeuronAI TTS** (per-modality keys).
+> For STT quality, add a server STT provider later. See
+> [`MULTILINGUAL_EVALUATION.md`](./MULTILINGUAL_EVALUATION.md).
 
 ## 6. Troubleshooting
 

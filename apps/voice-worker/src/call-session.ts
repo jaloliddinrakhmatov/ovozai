@@ -23,6 +23,8 @@ export interface CallSessionDeps {
   transport: AudioTransport;
   storage?: StorageProvider;
   llmModel?: string;
+  /** Called for every finalized transcript turn (for live browser captions). */
+  onTranscript?: (turn: { role: TranscriptRole; text: string; language: Language }) => void;
   logger?: (message: string) => void;
 }
 
@@ -328,6 +330,7 @@ export class CallSession {
     language: Language,
   ): Promise<void> {
     this.transcriptLog.push(`${role}: ${text}`);
+    this.deps.onTranscript?.({ role, text, language });
     await this.deps.internal
       .appendTranscriptTurn(this.deps.callId, {
         turnId: randomUUID(),

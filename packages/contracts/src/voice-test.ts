@@ -26,6 +26,12 @@ export type VoiceClientMessage =
 export type VoiceServerMessage =
   | { type: "state"; state: "connecting" | "ready" | "in_call" | "ended" }
   | { type: "call"; callId: string }
+  /** Session config: whether the server supplies spoken audio (real TTS). When
+   *  true the browser plays `agent_audio`; when false it speaks captions itself. */
+  | { type: "config"; serverAudio: boolean }
   | { type: "caption"; role: "AGENT" | "CALLER"; text: string; language?: string }
+  /** Dev-bridge playback (no real audio) — the agent's spoken text. */
   | { type: "agent_audio_text"; text: string }
+  /** Real synthesized audio for a turn (base64), e.g. NeuronAI WAV. */
+  | { type: "agent_audio"; mime: string; dataBase64: string }
   | { type: "error"; message: string };

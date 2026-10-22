@@ -70,10 +70,15 @@ export default function TestAgentPage() {
   const [language, setLanguage] = useState("uz");
   const [speakResponses, setSpeakResponses] = useState(true);
   const [listening, setListening] = useState(false);
+  const [serverAudio, setServerAudio] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const optsRef = useRef({ speak: true, language: "uz" });
+  const serverAudioRef = useRef(false);
+  const audioQueueRef = useRef<string[]>([]);
+  const audioPlayingRef = useRef(false);
+  const audioElRef = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
     optsRef.current = { speak: speakResponses, language };
@@ -89,6 +94,15 @@ export default function TestAgentPage() {
         /* ignore */
       }
     }
+    try {
+      audioElRef.current?.pause();
+    } catch {
+      /* ignore */
+    }
+    audioElRef.current = null;
+    audioPlayingRef.current = false;
+    audioQueueRef.current.forEach((url) => URL.revokeObjectURL(url));
+    audioQueueRef.current = [];
   }, []);
 
   useEffect(
@@ -108,29 +122,73 @@ export default function TestAgentPage() {
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight });
   }, [captions]);
 
-  const handleMessage = useCallback((message: VoiceServerMessage) => {
-    switch (message.type) {
-      case "state":
-        if (message.state === "in_call") setStatus("in_call");
-        if (message.state === "ended") setStatus((s) => (s === "error" ? s : "ended"));
-        break;
-      case "call":
-        setCallId(message.callId);
-        break;
-      case "caption":
-        setCaptions((prev) => [...prev, { role: message.role, text: message.text, language: message.language }]);
-        if (message.role === "AGENT" && optsRef.current.speak) {
-          speakText(message.text, message.language ?? optsRef.current.language);
-        }
-        break;
-      case "error":
-        setError(message.message);
-        setStatus("error");
-        break;
-      default:
-        break;
-    }
+  const playNext = useCallback(() => {
+    if (audioPlayingRef.current) return;
+    const url = audioQueueRef.current.shift();
+    if (!url) return;
+    audioPlayingRef.current = true;
+    const el = new Audio(url);
+    audioElRef.current = el;
+    const done = () => {
+      URL.revokeObjectURL(url);
+      audioPlayingRef.current = false;
+      audioElRef.current = null;
+      playNext();
+    };
+    el.onended = done;
+    el.onerror = done;
+    void el.play().catch(done);
   }, []);
+
+  const enqueueAudio = useCallback(
+    (mime: string, base64: string) => {
+      try {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i += 1) bytes[i] = binary.charCodeAt(i);
+        audioQueueRef.current.push(URL.createObjectURL(new Blob([bytes], { type: mime })));
+        playNext();
+      } catch {
+        /* ignore bad audio frame */
+      }
+    },
+    [playNext],
+  );
+
+  const handleMessage = useCallback(
+    (message: VoiceServerMessage) => {
+      switch (message.type) {
+        case "config":
+          serverAudioRef.current = message.serverAudio;
+          setServerAudio(message.serverAudio);
+          break;
+        case "state":
+          if (message.state === "in_call") setStatus("in_call");
+          if (message.state === "ended") setStatus((s) => (s === "error" ? s : "ended"));
+          break;
+        case "call":
+          setCallId(message.callId);
+          break;
+        case "caption":
+          setCaptions((prev) => [...prev, { role: message.role, text: message.text, language: message.language }]);
+          // Speak with the browser only when the server is NOT sending real audio.
+          if (message.role === "AGENT" && !serverAudioRef.current && optsRef.current.speak) {
+            speakText(message.text, message.language ?? optsRef.current.language);
+          }
+          break;
+        case "agent_audio":
+          enqueueAudio(message.mime, message.dataBase64);
+          break;
+        case "error":
+          setError(message.message);
+          setStatus("error");
+          break;
+        default:
+          break;
+      }
+    },
+    [enqueueAudio],
+  );
 
   const start = useCallback(async () => {
     closeWs();
@@ -271,14 +329,18 @@ export default function TestAgentPage() {
             <Button variant="outline" onClick={toggleListening} disabled={!connected}>
               {listening ? "Stop listening" : "🎤 Speak"}
             </Button>
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              <input
-                type="checkbox"
-                checked={speakResponses}
-                onChange={(event) => setSpeakResponses(event.target.checked)}
-              />
-              Speak responses
-            </label>
+            {serverAudio ? (
+              <span className="text-sm text-muted-foreground">🔊 Native voice (server TTS)</span>
+            ) : (
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={speakResponses}
+                  onChange={(event) => setSpeakResponses(event.target.checked)}
+                />
+                Speak responses
+              </label>
+            )}
           </div>
 
           {listening ? (

@@ -182,8 +182,12 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   + `VOICE_LLM_MODEL=qwen/qwen3.8-27b`; Groq `gpt-oss-*` return empty content — use Qwen) + the
   browser's **Web Speech API** for free STT/TTS (the Test page `🎤 Speak` + speaks replies).
   `createVoiceProviders` now takes **per-modality** providers (`VOICE_STT/LLM/TTS_PROVIDER` +
-  models), so STT/LLM/TTS mix freely; the session strips `<think>…</think>` from reasoning models.
-  Higher-quality Uzbek = add a server STT/TTS provider (`docs/MULTILINGUAL_EVALUATION.md`). LiveKit
+  models), plus **per-modality credentials** (`VOICE_STT/LLM/TTS_API_KEY` + `_BASE_URL`), so STT/LLM/TTS
+  mix freely (e.g. Groq LLM + NeuronAI TTS); the session strips `<think>…</think>` from reasoning
+  models. **NeuronAI native Uzbek voice is wired**: `providers-neuronai.ts` (`VOICE_TTS_PROVIDER=neuronai`,
+  `POST /tts/synthesize` → WAV, voice `kamron`), the worker streams the WAV and the gateway sends it as
+  `agent_audio` (flag `serverAudio`) for the browser to play instead of its own TTS; captions come from
+  the session's `onTranscript`. NeuronAI's LLM is OpenAI-compatible too (`gemma-4-26b-a4b`). LiveKit
   (SIP/telephony) stays the separate, unwired boundary. How-to: `docs/VOICE_TESTING.md`.
 
 ## Verifying a change

@@ -48,6 +48,8 @@ export interface VoiceGatewayDeps {
   storage?: StorageProvider;
   /** LLM model id passed to the session (e.g. a Groq model). */
   llmModel?: string;
+  /** True when a real TTS provider supplies audio to play in the browser. */
+  serverAudio?: boolean;
   maxSessions: number;
   logger?: (message: string) => void;
 }
@@ -90,9 +92,11 @@ async function runSession(
   payload: TestTicketPayload,
   deps: VoiceGatewayDeps,
 ): Promise<void> {
-  const transport = new WebSocketTransport(ws);
+  const serverAudio = deps.serverAudio ?? false;
+  const transport = new WebSocketTransport(ws, serverAudio);
   try {
     transport.send({ type: "state", state: "connecting" });
+    transport.send({ type: "config", serverAudio });
     const created = await deps.internal.createCall({
       agentId: payload.agentId,
       direction: "INBOUND",
@@ -111,6 +115,13 @@ async function runSession(
       transport,
       storage: deps.storage,
       llmModel: deps.llmModel,
+      onTranscript: (turn) =>
+        transport.send({
+          type: "caption",
+          role: turn.role === "CALLER" ? "CALLER" : "AGENT",
+          text: turn.text,
+          language: turn.language.toLowerCase(),
+        }),
       logger: deps.logger,
     });
     await session.run();

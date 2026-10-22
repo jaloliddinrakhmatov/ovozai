@@ -3,6 +3,7 @@ import type { LlmProvider } from "./llm";
 import type { TtsProvider } from "./tts";
 import { LocalRuleLlmProvider, LocalSttProvider, LocalTtsProvider } from "./providers-local";
 import { OpenAiLlmProvider, OpenAiSttProvider, OpenAiTtsProvider } from "./providers-openai";
+import { NeuronAiTtsProvider } from "./providers-neuronai";
 
 export interface VoiceProviders {
   stt: SttProvider;
@@ -11,15 +12,17 @@ export interface VoiceProviders {
 }
 
 type Modality = "local" | "openai";
+/** TTS additionally supports NeuronAI's native (non-OpenAI) Uzbek voice. */
+type TtsModality = Modality | "neuronai";
 
 export interface VoiceProviderConfig {
   /** Default provider for all three modalities (back-compat). */
   provider?: Modality;
   /** Per-modality overrides. Lets a deployment mix providers — e.g. a real
-   *  OpenAI-compatible LLM (Groq/Gemini) with local/browser STT + TTS. */
+   *  OpenAI-compatible LLM (Groq/Gemini) with NeuronAI TTS + browser STT. */
   sttProvider?: Modality;
   llmProvider?: Modality;
-  ttsProvider?: Modality;
+  ttsProvider?: TtsModality;
   /** Shared credentials for the OpenAI-compatible adapters (OpenAI, Groq, …).
    *  Used as the fallback when a per-modality key/URL is not given. */
   apiKey?: string;
@@ -47,7 +50,7 @@ export function createVoiceProviders(config: VoiceProviderConfig = {}): VoicePro
   const fallback = config.provider ?? "local";
   const sttKind = config.sttProvider ?? fallback;
   const llmKind = config.llmProvider ?? fallback;
-  const ttsKind = config.ttsProvider ?? fallback;
+  const ttsKind: TtsModality = config.ttsProvider ?? fallback;
 
   // Resolve each modality's credentials, falling back to the shared key/URL.
   const cred = (modality: string, apiKey: string | undefined, baseUrl: string | undefined) => {
@@ -68,8 +71,14 @@ export function createVoiceProviders(config: VoiceProviderConfig = {}): VoicePro
         ? new OpenAiLlmProvider({ ...cred("LLM", config.llmApiKey, config.llmBaseUrl), model: config.llmModel })
         : new LocalRuleLlmProvider(),
     tts:
-      ttsKind === "openai"
-        ? new OpenAiTtsProvider({ ...cred("TTS", config.ttsApiKey, config.ttsBaseUrl), model: config.ttsModel })
-        : new LocalTtsProvider(),
+      ttsKind === "neuronai"
+        ? new NeuronAiTtsProvider({
+            apiKey: cred("TTS", config.ttsApiKey, config.ttsBaseUrl).apiKey,
+            baseUrl: config.ttsBaseUrl ?? config.baseUrl,
+            voiceId: config.ttsModel,
+          })
+        : ttsKind === "openai"
+          ? new OpenAiTtsProvider({ ...cred("TTS", config.ttsApiKey, config.ttsBaseUrl), model: config.ttsModel })
+          : new LocalTtsProvider(),
   };
 }

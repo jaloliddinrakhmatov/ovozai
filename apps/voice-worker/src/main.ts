@@ -100,6 +100,10 @@ async function main(): Promise<void> {
   // Browser "Test Agent" gateway: serve real WebSocket voice sessions. This keeps
   // the process alive. (A one-shot VOICE_DEV_CALL_AGENT_ID run above exits before
   // reaching here; LiveKit SIP media is still a documented, unwired boundary.)
+  // When TTS is a real provider (NeuronAI/OpenAI), the server supplies audio for
+  // the browser to play; otherwise the browser speaks the text itself.
+  const ttsKind = config.ttsProvider ?? config.voiceProvider;
+  const serverAudio = ttsKind === "neuronai" || ttsKind === "openai";
   const gateway = startVoiceGateway({
     port: config.wsPort,
     hmacSecret: config.hmacSecret,
@@ -107,6 +111,7 @@ async function main(): Promise<void> {
     providers,
     storage,
     llmModel: config.llmModel,
+    serverAudio,
     maxSessions: config.maxConcurrentSessions,
     logger: (message) => console.warn("[voice-worker]", message),
   });

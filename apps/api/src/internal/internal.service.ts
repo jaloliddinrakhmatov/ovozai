@@ -7,12 +7,18 @@ import type {
   CallDto,
   CallEventReport,
   CallUpdateReport,
+  CancelAppointmentToolRequest,
+  CancelAppointmentToolResponse,
+  CheckAvailabilityToolRequest,
+  CheckAvailabilityToolResponse,
   InternalCreateCallRequest,
   InternalCreateCallResponse,
   KnowledgeRetrievalToolRequest,
   KnowledgeRetrievalToolResponse,
   Language,
   RecordWerRequest,
+  RescheduleAppointmentToolRequest,
+  RescheduleAppointmentToolResponse,
   RetrievalResult,
   TranscriptTurnReport,
   TransferCallToolRequest,
@@ -21,6 +27,14 @@ import type {
   VoiceAgentConfig,
 } from "@ovozai/contracts";
 import { AuditService } from "../audit/audit.service";
+import {
+  checkSlotAvailability,
+  durationMinutesBetween,
+  formatWhen,
+  parseBookingPolicy,
+  type BookingPolicy,
+  type ExistingAppointment,
+} from "../appointments/availability";
 import { Problems } from "../common/problem.exception";
 import { toCallDto } from "../common/mappers";
 import { PrismaService } from "../prisma/prisma.service";
@@ -312,23 +326,40 @@ export class InternalService {
     return { results };
   }
 
-  /** `book_appointment` tool — org-scoped from the call. */
+  /**
+   * `book_appointment` tool — org-scoped from the call. Enforces the agent's
+   * booking policy: no past slots, inside business hours, and never past
+   * capacity (no double-booking). On a clash it returns `booked: false` with the
+   * nearest open alternatives so the agent can offer them instead of failing.
+   */
   async bookAppointment(
     callId: string,
     dto: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     const call = await this.loadCall(callId);
     const organizationId = call.organizationId;
+    const now = new Date();
+    const policy = await this.loadBookingPolicy(call.agentId);
+    const start = new Date(dto.startsAt);
+    const explicitEnd = dto.endsAt ? new Date(dto.endsAt) : null;
+    const durationMin =
+      dto.durationMinutes ?? durationMinutesBetween(start, explicitEnd, policy.slotMinutes);
+
+    const existing = await this.loadActiveAppointments(organizationId);
+    const check = checkSlotAvailability(start, durationMin, existing, policy, now);
+    if (!check.available) {
+      return this.unavailableBooking(check.reason, check.suggestions, policy, call.language);
+    }
 
     let customerId = call.customerId;
     if (!customerId) {
       const phone = dto.phone ?? call.fromE164 ?? null;
       if (phone) {
-        const existing = await this.prisma.base.customer.findFirst({
+        const existingCustomer = await this.prisma.base.customer.findFirst({
           where: { organizationId, phoneE164: phone, deletedAt: null },
         });
         customerId =
-          existing?.id ??
+          existingCustomer?.id ??
           (
             await this.prisma.base.customer.create({
               data: { organizationId, phoneE164: phone, name: dto.customerName },
@@ -343,6 +374,7 @@ export class InternalService {
       await this.prisma.base.call.update({ where: { id: call.id }, data: { customerId } });
     }
 
+    const endsAt = explicitEnd ?? new Date(start.getTime() + durationMin * 60_000);
     const appointment = await this.prisma.base.appointment.create({
       data: {
         organizationId,
@@ -350,8 +382,8 @@ export class InternalService {
         agentId: call.agentId,
         title: dto.title,
         notes: dto.notes,
-        startsAt: new Date(dto.startsAt),
-        endsAt: dto.endsAt ? new Date(dto.endsAt) : null,
+        startsAt: start,
+        endsAt,
       },
     });
 
@@ -366,8 +398,8 @@ export class InternalService {
 
     const externalCalendarId = await this.integrations.syncAppointmentToCalendar(organizationId, {
       title: dto.title,
-      startsAt: dto.startsAt,
-      endsAt: dto.endsAt,
+      startsAt: start.toISOString(),
+      endsAt: endsAt.toISOString(),
       customerName: dto.customerName,
     });
     if (externalCalendarId) {
@@ -384,15 +416,230 @@ export class InternalService {
       })
       .catch(() => undefined);
     await this.webhooks
-      .dispatch(organizationId, "appointment.created", { appointmentId: appointment.id, startsAt: dto.startsAt })
+      .dispatch(organizationId, "appointment.created", {
+        appointmentId: appointment.id,
+        startsAt: start.toISOString(),
+      })
       .catch(() => undefined);
 
     return {
+      booked: true,
       appointmentId: appointment.id,
       customerId,
       status: appointment.status,
       startsAt: appointment.startsAt.toISOString(),
+      endsAt: endsAt.toISOString(),
+      startsAtText: formatWhen(start, policy.timezone, call.language),
     };
+  }
+
+  /** `check_availability` tool — is a slot bookable, and if not, the nearest openings. */
+  async checkAvailability(
+    callId: string,
+    dto: CheckAvailabilityToolRequest,
+  ): Promise<CheckAvailabilityToolResponse> {
+    const call = await this.loadCall(callId);
+    const now = new Date();
+    const policy = await this.loadBookingPolicy(call.agentId);
+    const start = new Date(dto.startsAt);
+    const durationMin = dto.durationMinutes ?? policy.slotMinutes;
+    const existing = await this.loadActiveAppointments(call.organizationId);
+    const check = checkSlotAvailability(start, durationMin, existing, policy, now);
+    return {
+      available: check.available,
+      reason: check.reason,
+      requestedStartsAt: start.toISOString(),
+      requestedStartsAtText: formatWhen(start, policy.timezone, call.language),
+      suggestions: check.suggestions.map((d) => d.toISOString()),
+      suggestionsText: check.suggestions.map((d) => formatWhen(d, policy.timezone, call.language)),
+    };
+  }
+
+  /** `reschedule_appointment` tool — move the caller's upcoming appointment. */
+  async rescheduleAppointment(
+    callId: string,
+    dto: RescheduleAppointmentToolRequest,
+  ): Promise<RescheduleAppointmentToolResponse> {
+    const call = await this.loadCall(callId);
+    const organizationId = call.organizationId;
+    const now = new Date();
+    const policy = await this.loadBookingPolicy(call.agentId);
+
+    const target = await this.findTargetAppointment(call, dto.appointmentId);
+    if (!target) return { rescheduled: false, reason: "not_found" };
+
+    const start = new Date(dto.newStartsAt);
+    const explicitEnd = dto.newEndsAt ? new Date(dto.newEndsAt) : null;
+    const durationMin =
+      dto.durationMinutes ??
+      durationMinutesBetween(
+        start,
+        explicitEnd,
+        durationMinutesBetween(target.startsAt, target.endsAt, policy.slotMinutes),
+      );
+
+    const existing = await this.loadActiveAppointments(organizationId);
+    const check = checkSlotAvailability(start, durationMin, existing, policy, now, target.id);
+    if (!check.available) {
+      return {
+        rescheduled: false,
+        reason: check.reason,
+        suggestions: check.suggestions.map((d) => d.toISOString()),
+        suggestionsText: check.suggestions.map((d) => formatWhen(d, policy.timezone, call.language)),
+      };
+    }
+
+    const endsAt = explicitEnd ?? new Date(start.getTime() + durationMin * 60_000);
+    await this.prisma.base.appointment.update({
+      where: { id: target.id },
+      data: { startsAt: start, endsAt },
+    });
+    await this.audit.record({
+      organizationId,
+      actorType: "SYSTEM",
+      action: "appointment.rescheduled_by_agent",
+      targetType: "Appointment",
+      targetId: target.id,
+      metadata: { callId, from: target.startsAt.toISOString(), to: start.toISOString() },
+    });
+    await this.notifications
+      .dispatch(organizationId, {
+        event: "appointment.rescheduled",
+        channel: "IN_APP",
+        body: `An appointment was rescheduled by the agent during a call.`,
+      })
+      .catch(() => undefined);
+    await this.webhooks
+      .dispatch(organizationId, "appointment.rescheduled", {
+        appointmentId: target.id,
+        startsAt: start.toISOString(),
+      })
+      .catch(() => undefined);
+
+    return {
+      rescheduled: true,
+      appointmentId: target.id,
+      startsAt: start.toISOString(),
+      startsAtText: formatWhen(start, policy.timezone, call.language),
+      status: target.status,
+    };
+  }
+
+  /** `cancel_appointment` tool — cancel the caller's upcoming appointment. */
+  async cancelAppointment(
+    callId: string,
+    dto: CancelAppointmentToolRequest,
+  ): Promise<CancelAppointmentToolResponse> {
+    const call = await this.loadCall(callId);
+    const organizationId = call.organizationId;
+    const policy = await this.loadBookingPolicy(call.agentId);
+
+    const target = await this.findTargetAppointment(call, dto.appointmentId);
+    if (!target) return { canceled: false, reason: "not_found" };
+
+    await this.prisma.base.appointment.update({
+      where: { id: target.id },
+      data: { status: "CANCELED" },
+    });
+    await this.audit.record({
+      organizationId,
+      actorType: "SYSTEM",
+      action: "appointment.canceled_by_agent",
+      targetType: "Appointment",
+      targetId: target.id,
+      metadata: { callId, reason: dto.reason },
+    });
+    await this.notifications
+      .dispatch(organizationId, {
+        event: "appointment.canceled",
+        channel: "IN_APP",
+        body: `An appointment was canceled by the agent during a call.`,
+      })
+      .catch(() => undefined);
+    await this.webhooks
+      .dispatch(organizationId, "appointment.canceled", { appointmentId: target.id })
+      .catch(() => undefined);
+
+    return {
+      canceled: true,
+      appointmentId: target.id,
+      startsAt: target.startsAt.toISOString(),
+      startsAtText: formatWhen(target.startsAt, policy.timezone, call.language),
+    };
+  }
+
+  /** Build an unavailable `book_appointment` response with speakable alternatives. */
+  private unavailableBooking(
+    reason: BookAppointmentToolResponse["reason"],
+    suggestions: Date[],
+    policy: BookingPolicy,
+    language: Language,
+  ): BookAppointmentToolResponse {
+    return {
+      booked: false,
+      reason,
+      suggestions: suggestions.map((d) => d.toISOString()),
+      suggestionsText: suggestions.map((d) => formatWhen(d, policy.timezone, language)),
+    };
+  }
+
+  /** The agent's booking policy (business hours, slot length, capacity), or UZ defaults. */
+  private async loadBookingPolicy(agentId: string | null): Promise<BookingPolicy> {
+    if (!agentId) return parseBookingPolicy(null);
+    const agent = await this.prisma.base.agent.findFirst({
+      where: { id: agentId },
+      select: { config: true },
+    });
+    return parseBookingPolicy(agent?.config ?? null);
+  }
+
+  /** Active (bookable) appointments from ~now onward, for conflict detection. */
+  private async loadActiveAppointments(organizationId: string): Promise<ExistingAppointment[]> {
+    const rows = await this.prisma.base.appointment.findMany({
+      where: {
+        organizationId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        startsAt: { gte: new Date(Date.now() - 3_600_000) },
+      },
+      select: { id: true, startsAt: true, endsAt: true },
+    });
+    return rows.map((r) => ({ id: r.id, startsAt: r.startsAt, endsAt: r.endsAt }));
+  }
+
+  /**
+   * The appointment a reschedule/cancel acts on: an explicit id (scoped to the
+   * call's org and still active), else the caller's soonest upcoming appointment.
+   */
+  private async findTargetAppointment(
+    call: { organizationId: string; customerId: string | null; fromE164: string | null },
+    appointmentId: string | undefined,
+  ) {
+    if (appointmentId) {
+      return this.prisma.base.appointment.findFirst({
+        where: {
+          id: appointmentId,
+          organizationId: call.organizationId,
+          status: { in: ["PENDING", "CONFIRMED"] },
+        },
+      });
+    }
+    let customerId = call.customerId;
+    if (!customerId && call.fromE164) {
+      const customer = await this.prisma.base.customer.findFirst({
+        where: { organizationId: call.organizationId, phoneE164: call.fromE164, deletedAt: null },
+      });
+      customerId = customer?.id ?? null;
+    }
+    if (!customerId) return null;
+    return this.prisma.base.appointment.findFirst({
+      where: {
+        organizationId: call.organizationId,
+        customerId,
+        status: { in: ["PENDING", "CONFIRMED"] },
+        startsAt: { gte: new Date(Date.now() - 3_600_000) },
+      },
+      orderBy: { startsAt: "asc" },
+    });
   }
 
   private async loadCall(callId: string) {

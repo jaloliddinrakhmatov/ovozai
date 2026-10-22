@@ -5,9 +5,12 @@ import type {
   BookAppointmentToolResponse,
   CallEventReport,
   CallUpdateReport,
+  CancelAppointmentToolResponse,
+  CheckAvailabilityToolResponse,
   KnowledgeRetrievalToolRequest,
   KnowledgeRetrievalToolResponse,
   RecordWerRequest,
+  RescheduleAppointmentToolResponse,
   TranscriptTurnReport,
   TransferCallToolRequest,
   TransferCallToolResponse,
@@ -65,11 +68,28 @@ class FakeInternalClient implements VoiceInternalClient {
     req: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     return {
+      booked: true,
       appointmentId: "33333333-3333-3333-3333-333333333333",
       customerId: "44444444-4444-4444-4444-444444444444",
       status: "PENDING",
       startsAt: req.startsAt,
+      startsAtText: req.startsAt,
     };
+  }
+  async checkAvailability(): Promise<CheckAvailabilityToolResponse> {
+    return {
+      available: true,
+      requestedStartsAt: new Date().toISOString(),
+      requestedStartsAtText: "soon",
+      suggestions: [],
+      suggestionsText: [],
+    };
+  }
+  async rescheduleAppointment(): Promise<RescheduleAppointmentToolResponse> {
+    return { rescheduled: true, appointmentId: "33333333-3333-3333-3333-333333333333", startsAt: new Date().toISOString() };
+  }
+  async cancelAppointment(): Promise<CancelAppointmentToolResponse> {
+    return { canceled: true, appointmentId: "33333333-3333-3333-3333-333333333333", startsAt: new Date().toISOString() };
   }
   transfers: TransferCallToolRequest[] = [];
   async transferCall(

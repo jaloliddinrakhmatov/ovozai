@@ -6,11 +6,17 @@ import {
   type BookAppointmentToolResponse,
   type CallEventReport,
   type CallUpdateReport,
+  type CancelAppointmentToolRequest,
+  type CancelAppointmentToolResponse,
+  type CheckAvailabilityToolRequest,
+  type CheckAvailabilityToolResponse,
   type InternalCreateCallRequest,
   type InternalCreateCallResponse,
   type KnowledgeRetrievalToolRequest,
   type KnowledgeRetrievalToolResponse,
   type RecordWerRequest,
+  type RescheduleAppointmentToolRequest,
+  type RescheduleAppointmentToolResponse,
   type TranscriptTurnReport,
   type TransferCallToolRequest,
   type TransferCallToolResponse,
@@ -32,6 +38,18 @@ export interface VoiceInternalClient {
     callId: string,
     req: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse>;
+  checkAvailability(
+    callId: string,
+    req: CheckAvailabilityToolRequest,
+  ): Promise<CheckAvailabilityToolResponse>;
+  rescheduleAppointment(
+    callId: string,
+    req: RescheduleAppointmentToolRequest,
+  ): Promise<RescheduleAppointmentToolResponse>;
+  cancelAppointment(
+    callId: string,
+    req: CancelAppointmentToolRequest,
+  ): Promise<CancelAppointmentToolResponse>;
   transferCall(callId: string, req: TransferCallToolRequest): Promise<TransferCallToolResponse>;
   recordWer(callId: string, req: RecordWerRequest): Promise<{ id: string }>;
 }
@@ -94,6 +112,24 @@ export class InternalApiClient implements VoiceInternalClient {
     req: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     return this.send("POST", INTERNAL_ROUTES.toolBookAppointment(callId), req);
+  }
+  checkAvailability(
+    callId: string,
+    req: CheckAvailabilityToolRequest,
+  ): Promise<CheckAvailabilityToolResponse> {
+    return this.send("POST", INTERNAL_ROUTES.toolCheckAvailability(callId), req);
+  }
+  rescheduleAppointment(
+    callId: string,
+    req: RescheduleAppointmentToolRequest,
+  ): Promise<RescheduleAppointmentToolResponse> {
+    return this.send("POST", INTERNAL_ROUTES.toolRescheduleAppointment(callId), req);
+  }
+  cancelAppointment(
+    callId: string,
+    req: CancelAppointmentToolRequest,
+  ): Promise<CancelAppointmentToolResponse> {
+    return this.send("POST", INTERNAL_ROUTES.toolCancelAppointment(callId), req);
   }
   transferCall(callId: string, req: TransferCallToolRequest): Promise<TransferCallToolResponse> {
     return this.send("POST", INTERNAL_ROUTES.toolTransfer(callId), req);

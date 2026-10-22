@@ -189,6 +189,20 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   `agent_audio` (flag `serverAudio`) for the browser to play instead of its own TTS; captions come from
   the session's `onTranscript`. NeuronAI's LLM is OpenAI-compatible too (`gemma-4-26b-a4b`). LiveKit
   (SIP/telephony) stays the separate, unwired boundary. How-to: `docs/VOICE_TESTING.md`.
+- **Booking robustness + concision (post-Phase-7).** The agent's appointment tools enforce a
+  per-agent **booking policy** read from `agent.config.booking` — `{ timezone, slotMinutes,
+  capacity, leadMinutes, hours: { mon: [["09:00","18:00"]], … } }` — parsed defensively in
+  `apps/api/src/appointments/availability.ts` (pure, unit-tested; defaults Asia/Tashkent, 30-min
+  slots, capacity 1, always-open). `InternalService.bookAppointment` now rejects past/out-of-hours
+  slots and **never books past capacity (no double-booking)**; on a clash it returns `booked:false`
+  with the nearest open alternatives (ISO + caller-language/timezone text). New internal tool routes
+  `check-availability`, `reschedule-appointment`, `cancel-appointment` (reschedule/cancel default to
+  the caller's soonest upcoming appointment) — **each new internal route MUST be added to the
+  `setGlobalPrefix` exclude list in `apps/api/src/main.ts`**, or it inherits the `api/v1` prefix and
+  the voice-worker's `/internal/v1/...` call 404s. The voice-worker exposes all four as LLM tools
+  (`call-session.ts` `TOOL_SCHEMAS`). `CallSession` also appends a `STYLE_DIRECTIVE` to the system
+  prompt and caps `maxTokens` so replies stay 1–2 sentences (snappier + cheaper TTS). Live-verified:
+  `scratchpad/phase-voice/booking-smoke.mjs` (25 checks via the real internal channel + Postgres).
 
 ## Verifying a change
 

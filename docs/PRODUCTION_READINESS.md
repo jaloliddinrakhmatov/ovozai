@@ -81,9 +81,10 @@ VERIFIED · ⛔ BLOCKED (needs external infra/credentials) · ⚪ NOT IMPLEMENTE
 ### Appointment booking "through the AI" (task #4 — verified precisely)
 | Capability | Status | Notes |
 | --- | --- | --- |
-| Book via `book_appointment` voice tool | 🟡 | **Create-only** — persists an appointment, but **no availability/slot check, no conflict/duplicate prevention** |
-| Reschedule / cancel via voice | ⚪ | API endpoints exist; **not exposed as agent tools** |
-| Reliable tool-calling by the LLM | 🔵 | Groq `qwen` calls tools; NeuronAI `gemma` is less reliable |
+| Book via `book_appointment` voice tool | 🟢 | Enforces the agent's booking policy: no past slots, inside business hours, **never past capacity (no double-booking)**; returns the nearest alternatives on a clash. Verified by a 25-check live smoke. (Best-effort TOCTOU: the check-then-create isn't a DB lock; fine at pilot volume.) |
+| `check_availability` voice tool | 🟢 | Reports whether a time is open and the nearest openings; same policy engine |
+| Reschedule / cancel via voice | 🟢 | `reschedule_appointment` / `cancel_appointment` tools; default to the caller's soonest upcoming appointment; reschedule re-checks availability. Verified live |
+| Reliable tool-calling by the LLM | 🔵 | Server-side booking logic is solid; whether the agent *calls* the right tool with a valid ISO time still depends on the LLM — Groq `qwen` is reliable, NeuronAI `gemma` less so |
 | Calendar sync of a booking | 🟡 | Mock `CalendarProvider`; real Google not wired |
 
 ### Billing & integrations
@@ -127,8 +128,11 @@ VERIFIED · ⛔ BLOCKED (needs external infra/credentials) · ⚪ NOT IMPLEMENTE
    operator registered. This is a legal gate, not just infra.
 4. **No backups / restore.** Non-negotiable before holding real customer data.
 5. **Server-side Uzbek STT** for mic accuracy (browser STT is too inconsistent for production).
-6. **Booking is create-only** — no availability/conflict checks and no reschedule/cancel via
-   voice. A receptionist that double-books or can't cancel is a product risk.
+6. ~~**Booking is create-only**~~ **RESOLVED (2026-10-22).** Booking now enforces availability,
+   business hours, and capacity (no double-booking), and exposes `check_availability`,
+   `reschedule_appointment`, and `cancel_appointment` as voice tools — verified by a 25-check live
+   smoke. Residual: reliable tool-calling depends on a capable LLM (use Groq `qwen`), and the
+   check-then-create is not a hard DB lock (adequate at pilot volume).
 7. **Payments are mocked** — fine for a *free* pilot; required before charging.
 
 ---
@@ -137,9 +141,9 @@ VERIFIED · ⛔ BLOCKED (needs external infra/credentials) · ⚪ NOT IMPLEMENTE
 
 | Dimension | Score (1–5) | Why |
 | --- | --- | --- |
-| Application correctness | **4** | Core verified, tests green; booking robustness gaps |
+| Application correctness | **4.5** | Core verified, tests green; booking now enforces availability/conflict + reschedule/cancel (live-verified) |
 | Security & tenancy | **4** | RLS + RBAC + audit strong; KMS/backups/residency open |
-| Voice (browser) | **3.5** | Real LLM + native TTS work; mic STT quality + verbosity/cost need tuning |
+| Voice (browser) | **3.5** | Real LLM + native TTS work; replies now trimmed to 1–2 sentences (snappier + cheaper); server-side mic STT quality remains the main gap |
 | Voice (real phone/SIP) | **1** | Not wired |
 | Deployability | **1** | No containers/CI/IaC/hosting |
 | Observability | **3** | Metrics + logs exist; nothing collects them |

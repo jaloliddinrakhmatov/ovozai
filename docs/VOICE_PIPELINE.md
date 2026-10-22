@@ -427,11 +427,13 @@ control plane. Every tool is **organization-scoped**: the executor injects `orga
 `callId` server-side and ignores any org/tenant identifier the model might emit. Argument shapes
 below are indicative.
 
-| Tool | Purpose | Rough arguments |
+| Tool | Purpose | Arguments (as implemented) |
 | --- | --- | --- |
 | `knowledge_retrieval` | RAG over the agent's knowledge base to answer questions. | `{ query: string, topK?: number, language?: string }` |
-| `check_availability` | Look up open appointment slots via the calendar adapter. | `{ serviceId?: string, from: string, to: string, staffId?: string }` |
-| `book_appointment` | Create an appointment for the caller. | `{ slotId: string, customerName: string, phone: string, serviceId?: string, notes?: string }` |
+| `check_availability` | Is a specific time bookable? Returns `available` and, if not, the nearest alternative times. | `{ startsAt: string, durationMinutes?: number }` |
+| `book_appointment` | Book at a confirmed, available time. Returns `booked:false` + alternatives on a clash. | `{ title: string, startsAt: string, endsAt?: string, durationMinutes?: number, customerName?: string, phone?: string, notes?: string }` |
+| `reschedule_appointment` | Move the caller's upcoming appointment to a new time. | `{ newStartsAt: string, newEndsAt?: string, durationMinutes?: number, appointmentId?: string }` |
+| `cancel_appointment` | Cancel the caller's upcoming appointment. | `{ appointmentId?: string, reason?: string }` |
 | `transfer_call` | Warm or cold transfer to a human number. | `{ target: string, mode: "warm" \| "cold", reason?: string }` |
 | `end_call` | Politely end the call when the goal is complete. | `{ reason?: string, disposition?: string }` |
 
@@ -448,8 +450,16 @@ Notes:
 - `knowledge_retrieval` queries only the calling organization's indexed documents/embeddings;
   retrieval is tenant-scoped at the data layer (see [DATABASE.md](./DATABASE.md) and
   [SECURITY.md](./SECURITY.md#multi-tenant-isolation)).
-- `book_appointment` / `check_availability` go through the calendar adapter in
-  `packages/integrations`; results are reflected to the dashboard via the API.
+- `check_availability` / `book_appointment` / `reschedule_appointment` /
+  `cancel_appointment` enforce the agent's **booking policy** (`agent.config.booking`:
+  timezone, `slotMinutes`, `capacity`, `leadMinutes`, weekly `hours`) in the internal booking
+  service (`apps/api/src/appointments/availability.ts`): no past slots, inside business hours,
+  never past capacity (no double-booking). On a clash the tool returns the nearest open
+  alternatives — in the caller's language/timezone — so the agent can offer them instead of
+  failing. `reschedule`/`cancel` default to the caller's soonest upcoming appointment. Bookings
+  are mirrored to the external calendar via the (best-effort) calendar adapter and surfaced on
+  the dashboard. Defaults (Asia/Tashkent, 30-min slots, capacity 1, always-open) apply when no
+  policy is configured.
 - `transfer_call` **warm** mode briefs/announces to the human before bridging; **cold** mode
   bridges directly. Both may be used as a graceful failure path (see §9).
 - `end_call` moves the machine to `ended`; teardown and post-processing follow.

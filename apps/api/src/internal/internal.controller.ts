@@ -3,9 +3,12 @@ import {
   bookAppointmentToolRequestSchema,
   callEventReportSchema,
   callUpdateReportSchema,
+  cancelAppointmentToolRequestSchema,
+  checkAvailabilityToolRequestSchema,
   internalCreateCallRequestSchema,
   knowledgeRetrievalToolRequestSchema,
   recordWerRequestSchema,
+  rescheduleAppointmentToolRequestSchema,
   transcriptTurnReportSchema,
   transferCallToolRequestSchema,
   usageReportSchema,
@@ -14,11 +17,17 @@ import {
   type CallDto,
   type CallEventReport,
   type CallUpdateReport,
+  type CancelAppointmentToolRequest,
+  type CancelAppointmentToolResponse,
+  type CheckAvailabilityToolRequest,
+  type CheckAvailabilityToolResponse,
   type InternalCreateCallRequest,
   type InternalCreateCallResponse,
   type KnowledgeRetrievalToolRequest,
   type KnowledgeRetrievalToolResponse,
   type RecordWerRequest,
+  type RescheduleAppointmentToolRequest,
+  type RescheduleAppointmentToolResponse,
   type TranscriptTurnReport,
   type TransferCallToolRequest,
   type TransferCallToolResponse,
@@ -93,6 +102,30 @@ export class InternalController {
     @Body(new ZodValidationPipe(bookAppointmentToolRequestSchema)) body: BookAppointmentToolRequest,
   ): Promise<BookAppointmentToolResponse> {
     return this.internal.bookAppointment(id, body);
+  }
+
+  @Post(":id/tools/check-availability")
+  checkAvailability(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(checkAvailabilityToolRequestSchema)) body: CheckAvailabilityToolRequest,
+  ): Promise<CheckAvailabilityToolResponse> {
+    return this.internal.checkAvailability(id, body);
+  }
+
+  @Post(":id/tools/reschedule-appointment")
+  rescheduleAppointment(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(rescheduleAppointmentToolRequestSchema)) body: RescheduleAppointmentToolRequest,
+  ): Promise<RescheduleAppointmentToolResponse> {
+    return this.internal.rescheduleAppointment(id, body);
+  }
+
+  @Post(":id/tools/cancel-appointment")
+  cancelAppointment(
+    @Param("id") id: string,
+    @Body(new ZodValidationPipe(cancelAppointmentToolRequestSchema)) body: CancelAppointmentToolRequest,
+  ): Promise<CancelAppointmentToolResponse> {
+    return this.internal.cancelAppointment(id, body);
   }
 
   @Post(":id/tools/transfer")

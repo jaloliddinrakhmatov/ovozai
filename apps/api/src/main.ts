@@ -44,8 +44,13 @@ async function bootstrap(): Promise<void> {
       { path: "internal/v1/calls/:id/transcript", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/usage", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/wer", method: RequestMethod.ALL },
+      // Every internal tool route must be listed here, or it inherits the
+      // `api/v1` prefix instead of staying under `/internal/v1`.
       { path: "internal/v1/calls/:id/tools/knowledge-retrieval", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/tools/book-appointment", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/check-availability", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/reschedule-appointment", method: RequestMethod.ALL },
+      { path: "internal/v1/calls/:id/tools/cancel-appointment", method: RequestMethod.ALL },
       { path: "internal/v1/calls/:id/tools/transfer", method: RequestMethod.ALL },
     ],
   });

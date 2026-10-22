@@ -62,9 +62,10 @@ planning figures to validate against real quotes — **not committed prices**.
   staging; run the full gate + voice smoke there.
 - **Phase 1 — Soft pilot, 1 friendly business.** Real agent + knowledge base + real data in the
   browser. Watch WER, booking correctness, latency (`/metrics`), notifications. Daily check-ins.
-- **Phase 2 — 2–3 businesses, soft.** Add booking availability/conflict + reschedule/cancel as
-  voice tools (product gap). Tune Uzbek prompts/voices per business. Collect a labeled corpus for
-  the WER/CER eval (`MULTILINGUAL_EVALUATION.md`).
+- **Phase 2 — 2–3 businesses, soft.** Booking availability/conflict + reschedule/cancel voice
+  tools are **done** (2026-10-22) — tune per-business booking policy (`agent.config.booking`:
+  hours, slot length, capacity). Tune Uzbek prompts/voices per business. Collect a labeled corpus
+  for the WER/CER eval (`MULTILINGUAL_EVALUATION.md`).
 - **Phase 3 — Phone pilot.** Stand up LiveKit + SIP + one UZ number; verify a real inbound call;
   move one business to the phone. Expand only after a clean week.
 
@@ -85,10 +86,11 @@ within target.
    deploy, purchase, or contact businesses without your go-ahead.
 
 ## 6. What I can do next (no external spend, awaiting your approval)
+- ~~Booking availability/conflict + reschedule/cancel voice tools~~ **done (2026-10-22)** — see
+  [`PRODUCTION_READINESS.md`](./PRODUCTION_READINESS.md) §2 and `VOICE_PIPELINE.md` §7.
+- ~~Trim agent verbosity~~ **done (2026-10-22)** — replies capped to 1–2 sentences.
 - Add **Dockerfiles + a production `docker-compose` + a CI workflow** (containerize the 4 apps).
 - Wire a **server-side Uzbek STT** adapter (NeuronAI `/stt`) for real mic accuracy.
-- Add **booking availability/conflict checks + reschedule/cancel voice tools** (closes the receptionist gap).
-- **Trim agent verbosity** (cheaper, snappier replies).
 - Draft the `SIP_INTEGRATION.md` runbook for the phone phase.
 
 Tell me which to start, and I'll implement + verify in small, committed steps.

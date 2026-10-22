@@ -28,7 +28,7 @@ export interface CallSessionDeps {
   logger?: (message: string) => void;
 }
 
-/** The LLM tool catalog (docs/VOICE_PIPELINE.md §7). transfer/check-availability are later phases. */
+/** The LLM tool catalog (docs/VOICE_PIPELINE.md §7). */
 const TOOL_SCHEMAS: LlmTool[] = [
   {
     name: "knowledge_retrieval",
@@ -40,19 +40,61 @@ const TOOL_SCHEMAS: LlmTool[] = [
     },
   },
   {
+    name: "check_availability",
+    description:
+      "Check whether a specific date/time is open before booking. Returns whether it is available and, if not, the nearest alternative times. Prefer calling this when the caller proposes a time.",
+    parameters: {
+      type: "object",
+      properties: {
+        startsAt: { type: "string", description: "Desired start, ISO 8601 (e.g. 2026-10-23T14:00:00Z)." },
+        durationMinutes: { type: "number" },
+      },
+      required: ["startsAt"],
+    },
+  },
+  {
     name: "book_appointment",
-    description: "Book an appointment for the caller.",
+    description:
+      "Book an appointment for the caller at a confirmed, available time. If the slot is taken or outside business hours this returns booked=false with alternative times to offer the caller.",
     parameters: {
       type: "object",
       properties: {
         title: { type: "string" },
-        startsAt: { type: "string" },
+        startsAt: { type: "string", description: "ISO 8601 start time." },
         endsAt: { type: "string" },
+        durationMinutes: { type: "number" },
         customerName: { type: "string" },
         phone: { type: "string" },
         notes: { type: "string" },
       },
       required: ["title", "startsAt"],
+    },
+  },
+  {
+    name: "reschedule_appointment",
+    description:
+      "Move the caller's existing upcoming appointment to a new time. Defaults to their soonest upcoming appointment when no id is given.",
+    parameters: {
+      type: "object",
+      properties: {
+        newStartsAt: { type: "string", description: "New ISO 8601 start time." },
+        newEndsAt: { type: "string" },
+        durationMinutes: { type: "number" },
+        appointmentId: { type: "string" },
+      },
+      required: ["newStartsAt"],
+    },
+  },
+  {
+    name: "cancel_appointment",
+    description:
+      "Cancel the caller's existing upcoming appointment. Defaults to their soonest upcoming appointment when no id is given.",
+    parameters: {
+      type: "object",
+      properties: {
+        appointmentId: { type: "string" },
+        reason: { type: "string" },
+      },
     },
   },
   {
@@ -77,6 +119,20 @@ const TOOL_SCHEMAS: LlmTool[] = [
   },
 ];
 
+/**
+ * Appended to every agent's system prompt so replies sound like a real, busy
+ * receptionist — and so each spoken turn stays cheap (TTS is billed per
+ * character). Kept provider-neutral; the model still answers in the caller's
+ * language and follows the business-specific prompt above it.
+ */
+const STYLE_DIRECTIVE = [
+  "Speak like a warm, efficient phone receptionist.",
+  "Reply in the caller's language.",
+  "Keep every reply to one or two short sentences — never read long lists or paragraphs aloud.",
+  "Ask only one question at a time.",
+  "When booking, confirm the exact date and time; if a time is unavailable, offer the alternatives you are given.",
+].join(" ");
+
 function langToCode(language: Language): "uz" | "ru" | "en" {
   return language === "UZ" ? "uz" : language === "RU" ? "ru" : "en";
 }
@@ -92,6 +148,25 @@ function codeToLang(code: string | undefined): Language | undefined {
     default:
       return undefined;
   }
+}
+
+/** A short spoken line for an unbookable slot, offering any alternatives. */
+function unavailableText(
+  reason: "past" | "out_of_hours" | "conflict" | undefined,
+  suggestions: string[] | undefined,
+): string {
+  const lead =
+    reason === "past"
+      ? "That time has already passed."
+      : reason === "out_of_hours"
+        ? "That's outside our opening hours."
+        : "That time is already taken.";
+  const alts = (suggestions ?? []).slice(0, 2);
+  if (alts.length === 0) {
+    return `${lead} What other time works for you?`;
+  }
+  const list = alts.length === 1 ? alts[0]! : `${alts[0]!} or ${alts[1]!}`;
+  return `${lead} I can offer ${list}. Which works?`;
 }
 
 function safeJson(raw: string): Record<string, unknown> {
@@ -128,7 +203,10 @@ export class CallSession {
   private readonly transcriptLog: string[] = [];
 
   constructor(private readonly deps: CallSessionDeps) {
-    this.messages.push({ role: "system", content: deps.agent.systemPrompt });
+    this.messages.push({
+      role: "system",
+      content: `${deps.agent.systemPrompt}\n\n${STYLE_DIRECTIVE}`,
+    });
   }
 
   get currentState(): CallState {
@@ -224,7 +302,9 @@ export class CallSession {
         messages: this.messages,
         tools: TOOL_SCHEMAS,
         temperature: 0.3,
-        maxTokens: 300,
+        // Short, receptionist-style turns (see STYLE_DIRECTIVE) — also keeps
+        // per-turn TTS cost low.
+        maxTokens: 160,
       })) {
         if (chunk.textDelta) {
           text += chunk.textDelta;
@@ -275,6 +355,19 @@ export class CallSession {
         const top = response.results[0];
         return { text: top ? top.content : "I don't have information about that just yet." };
       }
+      case "check_availability": {
+        const response = await internal.checkAvailability(callId, {
+          startsAt:
+            typeof args.startsAt === "string"
+              ? args.startsAt
+              : new Date(Date.now() + 86_400_000).toISOString(),
+          durationMinutes: typeof args.durationMinutes === "number" ? args.durationMinutes : undefined,
+        });
+        if (response.available) {
+          return { text: `${response.requestedStartsAtText} is available. Shall I book it?` };
+        }
+        return { text: unavailableText(response.reason, response.suggestionsText) };
+      }
       case "book_appointment": {
         const response = await internal.bookAppointment(callId, {
           title: typeof args.title === "string" ? args.title : "Appointment",
@@ -283,11 +376,43 @@ export class CallSession {
               ? args.startsAt
               : new Date(Date.now() + 86_400_000).toISOString(),
           endsAt: typeof args.endsAt === "string" ? args.endsAt : undefined,
+          durationMinutes: typeof args.durationMinutes === "number" ? args.durationMinutes : undefined,
           customerName: typeof args.customerName === "string" ? args.customerName : undefined,
           phone: typeof args.phone === "string" ? args.phone : undefined,
           notes: typeof args.notes === "string" ? args.notes : undefined,
         });
-        return { text: `Your appointment is booked for ${response.startsAt}.` };
+        if (response.booked) {
+          return { text: `Booked — ${response.startsAtText ?? response.startsAt}. Anything else?` };
+        }
+        return { text: unavailableText(response.reason, response.suggestionsText) };
+      }
+      case "reschedule_appointment": {
+        const response = await internal.rescheduleAppointment(callId, {
+          newStartsAt:
+            typeof args.newStartsAt === "string"
+              ? args.newStartsAt
+              : new Date(Date.now() + 86_400_000).toISOString(),
+          newEndsAt: typeof args.newEndsAt === "string" ? args.newEndsAt : undefined,
+          durationMinutes: typeof args.durationMinutes === "number" ? args.durationMinutes : undefined,
+          appointmentId: typeof args.appointmentId === "string" ? args.appointmentId : undefined,
+        });
+        if (response.rescheduled) {
+          return { text: `Done — moved to ${response.startsAtText ?? response.startsAt}. Anything else?` };
+        }
+        if (response.reason === "not_found") {
+          return { text: "I couldn't find an upcoming appointment to move. Would you like to book one?" };
+        }
+        return { text: unavailableText(response.reason, response.suggestionsText) };
+      }
+      case "cancel_appointment": {
+        const response = await internal.cancelAppointment(callId, {
+          appointmentId: typeof args.appointmentId === "string" ? args.appointmentId : undefined,
+          reason: typeof args.reason === "string" ? args.reason : undefined,
+        });
+        if (response.canceled) {
+          return { text: `Your appointment on ${response.startsAtText ?? response.startsAt} is canceled. Anything else?` };
+        }
+        return { text: "I couldn't find an upcoming appointment to cancel. Is there anything else?" };
       }
       case "transfer_call": {
         const target =

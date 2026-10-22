@@ -110,10 +110,16 @@ export const knowledgeRetrievalToolResponseSchema = z.object({
 });
 export type KnowledgeRetrievalToolResponse = z.infer<typeof knowledgeRetrievalToolResponseSchema>;
 
+/** Why a requested slot could not be booked (so the agent can offer alternatives). */
+export const slotUnavailableReasonSchema = z.enum(["past", "out_of_hours", "conflict"]);
+export type SlotUnavailableReason = z.infer<typeof slotUnavailableReasonSchema>;
+
 export const bookAppointmentToolRequestSchema = z.object({
   title: z.string().min(1).max(200),
   startsAt: z.iso.datetime(),
   endsAt: z.iso.datetime().optional(),
+  /** Appointment length; used to derive `endsAt` and to detect conflicts. */
+  durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
   customerName: z.string().max(200).optional(),
   phone: z.string().max(32).optional(),
   notes: z.string().max(5000).optional(),
@@ -121,12 +127,78 @@ export const bookAppointmentToolRequestSchema = z.object({
 export type BookAppointmentToolRequest = z.infer<typeof bookAppointmentToolRequestSchema>;
 
 export const bookAppointmentToolResponseSchema = z.object({
-  appointmentId: z.uuid(),
-  customerId: z.uuid(),
-  status: z.string(),
-  startsAt: z.string(),
+  /** True only when the appointment was actually created. */
+  booked: z.boolean(),
+  appointmentId: z.uuid().optional(),
+  customerId: z.uuid().optional(),
+  status: z.string().optional(),
+  startsAt: z.string().optional(),
+  endsAt: z.string().optional(),
+  /** Human-friendly start time in the agent's timezone, for the agent to speak. */
+  startsAtText: z.string().optional(),
+  /** Set when `booked` is false. */
+  reason: slotUnavailableReasonSchema.optional(),
+  /** ISO alternatives when the requested slot was unavailable. */
+  suggestions: z.array(z.string()).optional(),
+  /** Human-friendly alternatives in the agent's timezone, for the agent to speak. */
+  suggestionsText: z.array(z.string()).optional(),
 });
 export type BookAppointmentToolResponse = z.infer<typeof bookAppointmentToolResponseSchema>;
+
+/** `check_availability` tool — is a slot bookable, and if not, the nearest openings. */
+export const checkAvailabilityToolRequestSchema = z.object({
+  startsAt: z.iso.datetime(),
+  durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
+});
+export type CheckAvailabilityToolRequest = z.infer<typeof checkAvailabilityToolRequestSchema>;
+
+export const checkAvailabilityToolResponseSchema = z.object({
+  available: z.boolean(),
+  reason: slotUnavailableReasonSchema.optional(),
+  requestedStartsAt: z.string(),
+  requestedStartsAtText: z.string(),
+  suggestions: z.array(z.string()),
+  suggestionsText: z.array(z.string()),
+});
+export type CheckAvailabilityToolResponse = z.infer<typeof checkAvailabilityToolResponseSchema>;
+
+/** `reschedule_appointment` tool — move the caller's upcoming appointment. */
+export const rescheduleAppointmentToolRequestSchema = z.object({
+  newStartsAt: z.iso.datetime(),
+  newEndsAt: z.iso.datetime().optional(),
+  durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
+  /** Which appointment to move; defaults to the caller's soonest upcoming one. */
+  appointmentId: z.uuid().optional(),
+});
+export type RescheduleAppointmentToolRequest = z.infer<typeof rescheduleAppointmentToolRequestSchema>;
+
+export const rescheduleAppointmentToolResponseSchema = z.object({
+  rescheduled: z.boolean(),
+  appointmentId: z.string().optional(),
+  startsAt: z.string().optional(),
+  startsAtText: z.string().optional(),
+  status: z.string().optional(),
+  reason: z.enum(["past", "out_of_hours", "conflict", "not_found"]).optional(),
+  suggestions: z.array(z.string()).optional(),
+  suggestionsText: z.array(z.string()).optional(),
+});
+export type RescheduleAppointmentToolResponse = z.infer<typeof rescheduleAppointmentToolResponseSchema>;
+
+/** `cancel_appointment` tool — cancel the caller's upcoming appointment. */
+export const cancelAppointmentToolRequestSchema = z.object({
+  appointmentId: z.uuid().optional(),
+  reason: z.string().max(500).optional(),
+});
+export type CancelAppointmentToolRequest = z.infer<typeof cancelAppointmentToolRequestSchema>;
+
+export const cancelAppointmentToolResponseSchema = z.object({
+  canceled: z.boolean(),
+  appointmentId: z.string().optional(),
+  startsAt: z.string().optional(),
+  startsAtText: z.string().optional(),
+  reason: z.enum(["not_found"]).optional(),
+});
+export type CancelAppointmentToolResponse = z.infer<typeof cancelAppointmentToolResponseSchema>;
 
 /** `transfer_call` tool — warm/cold handoff to a human (Phase 5). */
 export const transferCallToolRequestSchema = z.object({

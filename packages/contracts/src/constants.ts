@@ -137,6 +137,12 @@ export const INTERNAL_ROUTES = {
     `${INTERNAL_BASE_PATH}/calls/${id}/tools/knowledge-retrieval`,
   toolBookAppointment: (id: string): string =>
     `${INTERNAL_BASE_PATH}/calls/${id}/tools/book-appointment`,
+  toolCheckAvailability: (id: string): string =>
+    `${INTERNAL_BASE_PATH}/calls/${id}/tools/check-availability`,
+  toolRescheduleAppointment: (id: string): string =>
+    `${INTERNAL_BASE_PATH}/calls/${id}/tools/reschedule-appointment`,
+  toolCancelAppointment: (id: string): string =>
+    `${INTERNAL_BASE_PATH}/calls/${id}/tools/cancel-appointment`,
   toolTransfer: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/tools/transfer`,
   recordWer: (id: string): string => `${INTERNAL_BASE_PATH}/calls/${id}/wer`,
 } as const;

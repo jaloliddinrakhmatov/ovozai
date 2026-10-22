@@ -47,7 +47,10 @@ function mockInternal() {
     reportUsage: async () => ({ id: "u" }),
     knowledgeRetrieval: async () =>
       ({ results: [{ content: "We are open 9:00–18:00, Monday to Saturday." }] }) as never,
-    bookAppointment: async () => ({ appointmentId: "a", startsAt: new Date().toISOString() }) as never,
+    bookAppointment: async () => ({ booked: true, appointmentId: "a", startsAt: new Date().toISOString() }) as never,
+    checkAvailability: async () => ({ available: true, suggestions: [], suggestionsText: [] }) as never,
+    rescheduleAppointment: async () => ({ rescheduled: true }) as never,
+    cancelAppointment: async () => ({ canceled: true }) as never,
     transferCall: async () => ({ status: "TRANSFERRED" }) as never,
     recordWer: async () => ({ id: "w" }),
   };

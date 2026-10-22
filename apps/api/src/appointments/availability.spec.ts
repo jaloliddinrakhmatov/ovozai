@@ -101,6 +101,40 @@ describe("checkSlotAvailability", () => {
     expect(r.suggestions[0]?.toISOString()).toBe("2026-10-22T09:30:00.000Z");
   });
 
+  it("suggests the same time on the next open day for an out-of-hours request", () => {
+    const weekdays = parseBookingPolicy({
+      booking: {
+        hours: {
+          mon: [["09:00", "18:00"]],
+          tue: [["09:00", "18:00"]],
+          wed: [["09:00", "18:00"]],
+          thu: [["09:00", "18:00"]],
+          fri: [["09:00", "18:00"]],
+        },
+      },
+    });
+    // 2026-10-24 is Saturday (closed); 15:00 local = 10:00Z.
+    const r = checkSlotAvailability(new Date("2026-10-24T10:00:00Z"), 30, [], weekdays, NOW);
+    expect(r.reason).toBe("out_of_hours");
+    const iso = r.suggestions.map((d) => d.toISOString());
+    // Monday 2026-10-26 at 15:00 local (10:00Z) — same time, next open day.
+    expect(iso).toContain("2026-10-26T10:00:00.000Z");
+  });
+
+  it("lunch-break hours: a slot during the break is out-of-hours, after it is open", () => {
+    const lunch = parseBookingPolicy({
+      booking: { hours: { thu: [["09:00", "13:00"], ["14:00", "18:00"]] } },
+    });
+    // Thursday 2026-10-22. 13:30 local (08:30Z) is in the lunch gap → closed.
+    expect(checkSlotAvailability(new Date("2026-10-22T08:30:00Z"), 30, [], lunch, NOW).reason).toBe(
+      "out_of_hours",
+    );
+    // 14:30 local (09:30Z) is in the afternoon window → open.
+    expect(checkSlotAvailability(new Date("2026-10-22T09:30:00Z"), 30, [], lunch, NOW).available).toBe(
+      true,
+    );
+  });
+
   it("allows overlap up to capacity", () => {
     const existing: ExistingAppointment[] = [{ id: "x", startsAt: new Date("2026-10-22T09:00:00Z"), endsAt: null }];
     const r = checkSlotAvailability(new Date("2026-10-22T09:00:00Z"), 30, existing, policy({ capacity: 2 }), NOW);

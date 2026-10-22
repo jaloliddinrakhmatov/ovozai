@@ -56,6 +56,10 @@ interface DayHours {
   enabled: boolean;
   open: string; // "HH:MM"
   close: string; // "HH:MM"
+  /** Optional second window after a lunch break. */
+  hasBreak: boolean;
+  open2: string;
+  close2: string;
 }
 
 interface BookingForm {
@@ -68,7 +72,10 @@ interface BookingForm {
 
 function defaultDays(enabled: boolean): Record<DayKey, DayHours> {
   return Object.fromEntries(
-    DAY_ORDER.map((d) => [d.key, { enabled, open: "09:00", close: "18:00" }]),
+    DAY_ORDER.map((d) => [
+      d.key,
+      { enabled, open: "09:00", close: "18:00", hasBreak: false, open2: "14:00", close2: "18:00" },
+    ]),
   ) as Record<DayKey, DayHours>;
 }
 
@@ -97,9 +104,16 @@ function bookingFromConfig(config: AgentDto["config"]): BookingForm {
     const hours = b.hours as Record<string, unknown>;
     for (const { key } of DAY_ORDER) {
       const windows = hours[key];
-      const first = Array.isArray(windows) && Array.isArray(windows[0]) ? (windows[0] as unknown[]) : null;
-      if (first && typeof first[0] === "string" && typeof first[1] === "string") {
-        form.days[key] = { enabled: true, open: first[0], close: first[1] };
+      const w0 = Array.isArray(windows) && Array.isArray(windows[0]) ? (windows[0] as unknown[]) : null;
+      const w1 = Array.isArray(windows) && Array.isArray(windows[1]) ? (windows[1] as unknown[]) : null;
+      if (w0 && typeof w0[0] === "string" && typeof w0[1] === "string") {
+        const day: DayHours = { ...form.days[key], enabled: true, open: w0[0], close: w0[1] };
+        if (w1 && typeof w1[0] === "string" && typeof w1[1] === "string") {
+          day.hasBreak = true;
+          day.open2 = w1[0];
+          day.close2 = w1[1];
+        }
+        form.days[key] = day;
       } else {
         form.days[key] = { ...form.days[key], enabled: false };
       }
@@ -126,6 +140,7 @@ function buildBooking(form: BookingForm): BuildResult {
     capacity: Math.floor(capacity),
   };
   if (form.enforceHours) {
+    const valid = (t: string) => /^\d{2}:\d{2}$/.test(t);
     const hours: Record<string, string[][]> = {};
     for (const { key, label } of DAY_ORDER) {
       const day = form.days[key];
@@ -133,10 +148,20 @@ function buildBooking(form: BookingForm): BuildResult {
         hours[key] = [];
         continue;
       }
-      if (!/^\d{2}:\d{2}$/.test(day.open) || !/^\d{2}:\d{2}$/.test(day.close) || day.open >= day.close) {
+      if (!valid(day.open) || !valid(day.close) || day.open >= day.close) {
         return { ok: false, error: `${label}: closing time must be after the opening time.` };
       }
-      hours[key] = [[day.open, day.close]];
+      const windows: string[][] = [[day.open, day.close]];
+      if (day.hasBreak) {
+        if (!valid(day.open2) || !valid(day.close2) || day.open2 >= day.close2) {
+          return { ok: false, error: `${label}: afternoon closing must be after afternoon opening.` };
+        }
+        if (day.open2 < day.close) {
+          return { ok: false, error: `${label}: the afternoon window must start after the morning window ends.` };
+        }
+        windows.push([day.open2, day.close2]);
+      }
+      hours[key] = windows;
     }
     booking.hours = hours;
   }
@@ -502,40 +527,80 @@ export default function AgentDetailPage() {
                 </label>
 
                 {form.booking.enforceHours ? (
-                  <div className="flex flex-col gap-2">
+                  <div className="flex flex-col gap-3">
                     {DAY_ORDER.map(({ key, label }) => {
                       const day = form.booking.days[key];
+                      const timeCls =
+                        "h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50";
                       return (
-                        <div key={key} className="flex flex-wrap items-center gap-3">
-                          <label className="flex w-32 items-center gap-2 text-sm">
+                        <div
+                          key={key}
+                          className="flex flex-col gap-2 border-b border-border/50 pb-2 last:border-0"
+                        >
+                          <div className="flex flex-wrap items-center gap-3">
+                            <label className="flex w-32 items-center gap-2 text-sm">
+                              <input
+                                type="checkbox"
+                                className="h-4 w-4"
+                                checked={day.enabled}
+                                onChange={(e) => updateDay(key, { enabled: e.target.checked })}
+                                disabled={!canManage}
+                              />
+                              {label}
+                            </label>
                             <input
-                              type="checkbox"
-                              className="h-4 w-4"
-                              checked={day.enabled}
-                              onChange={(e) => updateDay(key, { enabled: e.target.checked })}
-                              disabled={!canManage}
+                              type="time"
+                              aria-label={`${label} opening time`}
+                              className={timeCls}
+                              value={day.open}
+                              onChange={(e) => updateDay(key, { open: e.target.value })}
+                              disabled={!canManage || !day.enabled}
                             />
-                            {label}
-                          </label>
-                          <input
-                            type="time"
-                            aria-label={`${label} opening time`}
-                            className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            value={day.open}
-                            onChange={(e) => updateDay(key, { open: e.target.value })}
-                            disabled={!canManage || !day.enabled}
-                          />
-                          <span className="text-sm text-muted-foreground">–</span>
-                          <input
-                            type="time"
-                            aria-label={`${label} closing time`}
-                            className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
-                            value={day.close}
-                            onChange={(e) => updateDay(key, { close: e.target.value })}
-                            disabled={!canManage || !day.enabled}
-                          />
-                          {!day.enabled ? (
-                            <span className="text-xs text-muted-foreground">closed</span>
+                            <span className="text-sm text-muted-foreground">–</span>
+                            <input
+                              type="time"
+                              aria-label={`${label} closing time`}
+                              className={timeCls}
+                              value={day.close}
+                              onChange={(e) => updateDay(key, { close: e.target.value })}
+                              disabled={!canManage || !day.enabled}
+                            />
+                            {day.enabled ? (
+                              <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                                <input
+                                  type="checkbox"
+                                  className="h-3.5 w-3.5"
+                                  checked={day.hasBreak}
+                                  onChange={(e) => updateDay(key, { hasBreak: e.target.checked })}
+                                  disabled={!canManage}
+                                />
+                                Lunch break
+                              </label>
+                            ) : (
+                              <span className="text-xs text-muted-foreground">closed</span>
+                            )}
+                          </div>
+                          {day.enabled && day.hasBreak ? (
+                            <div className="flex flex-wrap items-center gap-3 sm:pl-[8.75rem]">
+                              <span className="text-xs text-muted-foreground">then reopen</span>
+                              <input
+                                type="time"
+                                aria-label={`${label} afternoon opening time`}
+                                className={timeCls}
+                                value={day.open2}
+                                onChange={(e) => updateDay(key, { open2: e.target.value })}
+                                disabled={!canManage}
+                              />
+                              <span className="text-sm text-muted-foreground">–</span>
+                              <input
+                                type="time"
+                                aria-label={`${label} afternoon closing time`}
+                                className={timeCls}
+                                value={day.close2}
+                                onChange={(e) => updateDay(key, { close2: e.target.value })}
+                                disabled={!canManage}
+                              />
+                            </div>
                           ) : null}
                         </div>
                       );

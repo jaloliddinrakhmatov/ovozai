@@ -135,6 +135,8 @@ const STYLE_DIRECTIVE = [
   "Never tell the caller an appointment is booked, moved, or cancelled unless the matching tool has just",
   "confirmed it in this same turn — never invent a confirmation.",
   "Always pass the exact date and time to the tool as a concrete value.",
+  "Before booking, read the details back — service, date, time, and the caller's name — and get a clear",
+  "yes; after the tool confirms, repeat the booked date and time once.",
   "When a time is unavailable, offer the alternatives the tool gives you.",
   "For questions about the business (hours, location, prices, services, policies), call",
   "knowledge_retrieval and answer ONLY from what it returns — never guess facts.",

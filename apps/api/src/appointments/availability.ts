@@ -211,6 +211,33 @@ function classify(
   return undefined;
 }
 
+/** The instant on `dayAnchor`'s calendar day (in `timezone`) at `minutesOfDay`. */
+function instantOnDay(dayAnchor: Date, minutesOfDay: number, timezone: string): Date {
+  const tz = isValidTimezone(timezone) ? timezone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(dayAnchor);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  return zonedWallClockToUtc(
+    get("year"),
+    get("month"),
+    get("day"),
+    Math.floor(minutesOfDay / 60),
+    minutesOfDay % 60,
+    0,
+    tz,
+  );
+}
+
+/**
+ * Up to 3 alternative start times, blended so they feel like a receptionist's:
+ * the nearest open slot (great for a clash — "I have 15:30 instead"), plus the
+ * SAME time of day on the next open days ("or 15:00 tomorrow") rather than only
+ * the earliest morning slot.
+ */
 function findSuggestions(
   base: Date,
   durationMin: number,
@@ -221,16 +248,34 @@ function findSuggestions(
 ): Date[] {
   const slotMs = policy.slotMinutes * 60_000;
   const earliest = Math.max(base.getTime(), now.getTime() + policy.leadMinutes * 60_000);
-  let t = Math.ceil(earliest / slotMs) * slotMs;
-  const out: Date[] = [];
-  // Bound the scan (~14 days at 30-min slots) so it always terminates.
-  for (let i = 0; i < 672 && out.length < 3; i += 1, t += slotMs) {
-    const candidate = new Date(t);
-    if (!classify(candidate, durationMin, existing, policy, now, excludeId)) {
-      out.push(candidate);
+  const picks: Date[] = [];
+  const seen = new Set<number>();
+  const add = (candidate: Date): void => {
+    if (
+      candidate.getTime() >= earliest &&
+      !seen.has(candidate.getTime()) &&
+      !classify(candidate, durationMin, existing, policy, now, excludeId)
+    ) {
+      seen.add(candidate.getTime());
+      picks.push(candidate);
     }
+  };
+
+  // 1) The nearest open slot from the requested time (handles a clash on the day).
+  let t = Math.ceil(earliest / slotMs) * slotMs;
+  for (let i = 0; i < 96 && picks.length < 1; i += 1, t += slotMs) add(new Date(t));
+
+  // 2) The same time of day on the upcoming days.
+  const requestedMinutes = wallClock(base, policy.timezone).minutes;
+  for (let dayOffset = 0; dayOffset <= 14 && picks.length < 3; dayOffset += 1) {
+    add(instantOnDay(new Date(base.getTime() + dayOffset * 86_400_000), requestedMinutes, policy.timezone));
   }
-  return out;
+
+  // 3) Fill any remaining slots with the earliest-forward scan (bounded).
+  t = Math.ceil(earliest / slotMs) * slotMs;
+  for (let i = 0; i < 672 && picks.length < 3; i += 1, t += slotMs) add(new Date(t));
+
+  return picks.sort((a, b) => a.getTime() - b.getTime()).slice(0, 3);
 }
 
 /**

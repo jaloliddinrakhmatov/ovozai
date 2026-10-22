@@ -16,11 +16,13 @@
   "dependencies": {
     "@ovozai/contracts": "workspace:*",
     "@ovozai/integrations": "workspace:*",
-    "dotenv": "catalog:"
+    "dotenv": "catalog:",
+    "ws": "catalog:"
   },
   "devDependencies": {
     "@ovozai/config": "workspace:*",
     "@types/node": "catalog:",
+    "@types/ws": "catalog:",
     "eslint": "catalog:",
     "tsup": "catalog:",
     "tsx": "catalog:",

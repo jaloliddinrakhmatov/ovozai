@@ -194,6 +194,12 @@ export default function AgentsPage() {
                   <div className="flex items-center gap-2">
                     <AgentStatusBadge status={agent.status} />
                     <Link
+                      href={`/dashboard/agents/${agent.id}/test`}
+                      className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
+                    >
+                      Test
+                    </Link>
+                    <Link
                       href={`/dashboard/agents/${agent.id}`}
                       className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"
                     >

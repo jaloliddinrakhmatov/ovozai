@@ -17,6 +17,8 @@ export interface VoiceWorkerConfig {
   providerApiKey?: string;
   providerBaseUrl?: string;
   maxConcurrentSessions: number;
+  /** Port for the browser "Test Agent" WebSocket gateway. */
+  wsPort: number;
   logLevel: string;
 }
 
@@ -36,6 +38,7 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     providerApiKey: process.env.VOICE_PROVIDER_API_KEY,
     providerBaseUrl: process.env.VOICE_PROVIDER_BASE_URL,
     maxConcurrentSessions: Number(process.env.VOICE_WORKER_MAX_SESSIONS ?? 10),
+    wsPort: Number(process.env.VOICE_WS_PORT ?? 8787),
     logLevel: process.env.LOG_LEVEL ?? "info",
   };
 }

@@ -67,6 +67,7 @@ export const API_ROUTES = {
     versions: (id: string): string => `${API_BASE_PATH}/agents/${id}/versions`,
     restoreVersion: (id: string, version: number): string =>
       `${API_BASE_PATH}/agents/${id}/versions/${version}/restore`,
+    testSession: (id: string): string => `${API_BASE_PATH}/agents/${id}/test-session`,
   },
   knowledgeBases: {
     root: `${API_BASE_PATH}/knowledge-bases`,

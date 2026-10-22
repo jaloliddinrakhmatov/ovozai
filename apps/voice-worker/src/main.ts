@@ -14,6 +14,7 @@ import { loadVoiceWorkerConfig, loadVoiceWorkerEnv } from "./config";
 import { InternalApiClient } from "./internal-client";
 import { CallSession } from "./call-session";
 import { SimulatedTransport, type SimulatedCallerUtterance } from "./transport";
+import { startVoiceGateway } from "./gateway";
 
 loadVoiceWorkerEnv();
 const config = loadVoiceWorkerConfig();
@@ -83,26 +84,31 @@ async function main(): Promise<void> {
     process.exit(0);
   }
 
+  // Browser "Test Agent" gateway: serve real WebSocket voice sessions. This keeps
+  // the process alive. (A one-shot VOICE_DEV_CALL_AGENT_ID run above exits before
+  // reaching here; LiveKit SIP media is still a documented, unwired boundary.)
+  const gateway = startVoiceGateway({
+    port: config.wsPort,
+    hmacSecret: config.hmacSecret,
+    internal,
+    providers,
+    storage,
+    maxSessions: config.maxConcurrentSessions,
+    logger: (message) => console.warn("[voice-worker]", message),
+  });
+  console.info("[voice-worker] Test-Agent gateway ready on ws://0.0.0.0:%d", config.wsPort);
   if (config.livekitUrl) {
     console.info(
-      "[voice-worker] LIVEKIT_URL is set, but the live media transport needs @livekit/rtc-node + a running server (see livekit-transport.ts). Idling.",
-    );
-  } else {
-    console.info(
-      "[voice-worker] Set VOICE_DEV_CALL_AGENT_ID to run a simulated call, or LIVEKIT_URL for live media. Idling.",
+      "[voice-worker] LIVEKIT_URL is set, but the live SIP media transport needs @livekit/rtc-node + a server (see livekit-transport.ts).",
     );
   }
-
-  const heartbeat = setInterval(() => {
-    console.debug("[voice-worker] heartbeat — idle, awaiting dispatch");
-  }, 30_000);
 
   let shuttingDown = false;
   const shutdown = (signal: NodeJS.Signals): void => {
     if (shuttingDown) return;
     shuttingDown = true;
     console.info("[voice-worker] received %s — shutting down", signal);
-    clearInterval(heartbeat);
+    gateway.close();
     process.exit(0);
   };
   process.on("SIGINT", shutdown);

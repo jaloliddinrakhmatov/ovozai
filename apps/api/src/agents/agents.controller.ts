@@ -7,6 +7,7 @@ import {
   type AgentVersionDto,
   type CreateAgentRequest,
   type PaginationQuery,
+  type TestSessionResponse,
   type UpdateAgentRequest,
 } from "@ovozai/contracts";
 import { CurrentPrincipal } from "../common/current-principal.decorator";
@@ -35,6 +36,16 @@ export class AgentsController {
     @Req() req: RequestWithContext,
   ): Promise<AgentDto> {
     return this.agents.create(principal, principal.organizationId as string, body, requestContextFrom(req));
+  }
+
+  @Post(":id/test-session")
+  @Roles("MEMBER")
+  @HttpCode(200)
+  testSession(
+    @CurrentPrincipal() principal: UserPrincipal,
+    @Param("id") id: string,
+  ): Promise<TestSessionResponse> {
+    return this.agents.createTestSession(principal.organizationId as string, id);
   }
 
   @Post(":id/publish")

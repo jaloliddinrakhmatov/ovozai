@@ -68,6 +68,10 @@ catalog:
   bullmq: ^6.4.0
   ioredis: ^6.0.0
 
+  # --- Realtime / websockets (voice gateway) ---
+  ws: ^8.18.3
+  "@types/ws": ^8.18.1
+
   # --- Validation / shared contracts ---
   zod: ^4.6.7
 

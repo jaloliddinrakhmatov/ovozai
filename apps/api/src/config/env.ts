@@ -73,6 +73,13 @@ const envSchema = z
     /** Data-residency region of the PII-bearing stores (Law No. ZRU-547).
      *  Surfaced on readiness/metrics for auditability; "uz" = in-country. */
     DATA_REGION: z.string().default("uz"),
+
+    // --- Browser "Test Agent" voice gateway (real-voice) ---
+    /** Public WebSocket URL of the voice-worker gateway, handed to the browser in
+     *  the test-session ticket response. */
+    VOICE_WS_PUBLIC_URL: z.string().default("ws://localhost:8787"),
+    /** Lifetime of a test-session ticket (seconds) before the browser must connect. */
+    VOICE_TEST_SESSION_TTL_SECONDS: z.coerce.number().int().positive().default(120),
   })
   .superRefine((env, ctx) => {
     if (env.NODE_ENV === "production") {

@@ -1,10 +1,13 @@
+import { createHmac } from "node:crypto";
 import { Injectable } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { Prisma } from "@ovozai/database";
 import type {
   AgentDto,
   AgentVersionDto,
   CreateAgentRequest,
   PaginationQuery,
+  TestSessionResponse,
   UpdateAgentRequest,
 } from "@ovozai/contracts";
 import { AuditService } from "../audit/audit.service";
@@ -26,7 +29,32 @@ export class AgentsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly planLimits: PlanLimitsService,
+    private readonly config: ConfigService,
   ) {}
+
+  /**
+   * Issue a short-lived, HMAC-signed ticket for a browser "Test Agent" session.
+   * The browser opens a WebSocket to the voice-worker gateway with this ticket;
+   * the worker verifies the signature (shared INTERNAL_HMAC_SECRET) and runs a
+   * real CallSession for this agent. RBAC is enforced here, on the API.
+   */
+  async createTestSession(organizationId: string, agentId: string): Promise<TestSessionResponse> {
+    const agent = await this.prisma.tenant.agent.findFirst({ where: { id: agentId } });
+    if (!agent) throw Problems.notFound("Agent not found.");
+
+    const ttl = this.config.get<number>("VOICE_TEST_SESSION_TTL_SECONDS") ?? 120;
+    const exp = Math.floor(Date.now() / 1000) + ttl;
+    const payload = Buffer.from(JSON.stringify({ agentId, organizationId, exp })).toString("base64url");
+    const secret = this.config.get<string>("INTERNAL_HMAC_SECRET") ?? "";
+    const signature = createHmac("sha256", secret).update(payload).digest("hex");
+
+    return {
+      wsUrl: this.config.get<string>("VOICE_WS_PUBLIC_URL") ?? "ws://localhost:8787",
+      ticket: `${payload}.${signature}`,
+      agentId,
+      expiresAt: new Date(exp * 1000).toISOString(),
+    };
+  }
 
   async list(query: PaginationQuery): Promise<Page<AgentDto>> {
     const take = query.limit;

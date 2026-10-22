@@ -170,6 +170,17 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   in `StructuredLogger` (per-request `requestId` via an `AsyncLocalStorage` set in the request-id
   middleware; every line PII-redacted via `common/redaction.ts`). Infra/policy items (residency
   placement, at-scale load, pentest, SOC2) are documented boundaries in `docs/COMPLIANCE.md`.
+- **Real-voice / browser Test Agent (post-Phase-7).** The voice-worker now runs a **WebSocket
+  gateway** (`apps/voice-worker/src/gateway.ts` + `websocket-transport.ts`, default port 8787) so a
+  browser can hold a live conversation through the real `CallSession` (STT→LLM→TTS). Auth: the API
+  issues a short-lived HMAC-signed ticket (`POST /agents/:id/test-session`, signed with
+  `INTERNAL_HMAC_SECRET`); the worker verifies it (`verifyTestTicket`) — no auth stack in the
+  worker. The dashboard **Agents → Test** page (`/dashboard/agents/[id]/test`) does type-to-talk +
+  live captions + barge-in today on the local **dev-bridge** (not real audio); **live mic STT /
+  natural TTS need a real provider** (see `docs/MULTILINGUAL_EVALUATION.md` — Google Chirp for
+  Uzbek). `createVoiceProviders` is still single-`provider`; adopting real Uzbek providers means
+  adding per-modality adapters. LiveKit (SIP/telephony) stays the separate, unwired boundary.
+  How-to + troubleshooting: `docs/VOICE_TESTING.md`.
 
 ## Verifying a change
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState, type FormEvent } from "react";
 import {
   appointmentStatusSchema,
@@ -257,6 +258,14 @@ function AppointmentRow({
           <span className="text-xs text-muted-foreground">
             {customerLabel} · {formatDateTime(appointment.startsAt)}
           </span>
+          {appointment.callId ? (
+            <Link
+              href={`/dashboard/calls/${appointment.callId}`}
+              className="text-xs text-muted-foreground underline underline-offset-2"
+            >
+              📞 Booked by the AI — view call
+            </Link>
+          ) : null}
         </div>
         <div className="flex items-center gap-2">
           {canManage ? (

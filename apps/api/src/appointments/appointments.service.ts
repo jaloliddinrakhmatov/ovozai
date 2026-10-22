@@ -35,6 +35,7 @@ export class AppointmentsService {
     const where: Prisma.AppointmentWhereInput = {};
     if (query.status) where.status = query.status;
     if (query.customerId) where.customerId = query.customerId;
+    if (query.callId) where.callId = query.callId;
     if (query.from || query.to) {
       where.startsAt = {
         ...(query.from ? { gte: new Date(query.from) } : {}),

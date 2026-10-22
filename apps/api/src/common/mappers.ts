@@ -198,6 +198,7 @@ export function toAppointmentDto(appointment: Appointment): AppointmentDto {
     organizationId: appointment.organizationId,
     customerId: appointment.customerId,
     agentId: appointment.agentId ?? null,
+    callId: appointment.callId ?? null,
     title: appointment.title,
     notes: appointment.notes ?? null,
     startsAt: appointment.startsAt.toISOString(),

@@ -15,6 +15,8 @@ export const appointmentDtoSchema = z.object({
   organizationId: z.uuid(),
   customerId: z.uuid(),
   agentId: z.uuid().nullable(),
+  /** The call during which the AI booked this appointment, if any. */
+  callId: z.uuid().nullable(),
   title: z.string(),
   notes: z.string().nullable(),
   startsAt: z.string(),
@@ -53,6 +55,7 @@ export type UpdateAppointmentRequest = z.infer<typeof updateAppointmentRequestSc
 export const appointmentListQuerySchema = paginationQuerySchema.extend({
   status: appointmentStatusSchema.optional(),
   customerId: z.uuid().optional(),
+  callId: z.uuid().optional(),
   from: z.iso.datetime().optional(),
   to: z.iso.datetime().optional(),
 });

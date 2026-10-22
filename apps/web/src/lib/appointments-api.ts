@@ -20,6 +20,7 @@ export async function listAppointments(params?: {
   cursor?: string;
   status?: AppointmentStatus;
   customerId?: string;
+  callId?: string;
   from?: string;
   to?: string;
 }): Promise<PaginatedResult<AppointmentDto>> {
@@ -28,6 +29,7 @@ export async function listAppointments(params?: {
   if (params?.cursor) search.set("cursor", params.cursor);
   if (params?.status) search.set("status", params.status);
   if (params?.customerId) search.set("customerId", params.customerId);
+  if (params?.callId) search.set("callId", params.callId);
   if (params?.from) search.set("from", params.from);
   if (params?.to) search.set("to", params.to);
   const query = search.toString();

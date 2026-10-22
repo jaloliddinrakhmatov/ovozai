@@ -1,7 +1,12 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
-import { createOrganizationRequestSchema } from "@ovozai/contracts";
+import Link from "next/link";
+import { useEffect, useState, type FormEvent } from "react";
+import {
+  createOrganizationRequestSchema,
+  type AppointmentDto,
+  type CallDto,
+} from "@ovozai/contracts";
 import {
   Alert,
   Badge,
@@ -16,6 +21,10 @@ import { useAuth } from "@/lib/auth-context";
 import { describeError, zodFieldErrors, type FieldErrors } from "@/lib/form";
 import { FormField } from "@/components/form-field";
 import { RoleBadge } from "@/components/role-badge";
+import { CallStatusBadge } from "@/components/call-status-badge";
+import { listCalls } from "@/lib/calls-api";
+import { listAppointments } from "@/lib/appointments-api";
+import { formatDateTime } from "@/lib/datetime";
 
 function CreateOrganization() {
   const { createOrganization } = useAuth();
@@ -151,6 +160,115 @@ function OrganizationSwitcher() {
   );
 }
 
+/** At-a-glance snapshot: what the AI has been doing lately. */
+function ActivitySnapshot({ orgId }: { orgId: string }) {
+  const [calls, setCalls] = useState<CallDto[]>([]);
+  const [appointments, setAppointments] = useState<AppointmentDto[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    void (async () => {
+      try {
+        const [callPage, apptPage] = await Promise.all([
+          listCalls({ limit: 5 }),
+          listAppointments({ from: new Date().toISOString(), limit: 5 }),
+        ]);
+        if (cancelled) return;
+        setCalls(callPage.data);
+        // API returns newest-first; show the soonest upcoming appointments first.
+        setAppointments(
+          [...apptPage.data].sort(
+            (a, b) => new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime(),
+          ),
+        );
+      } catch {
+        // Snapshot is best-effort; the rest of the page still works.
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <Card>
+        <CardHeader>
+          <CardTitle>Recent calls</CardTitle>
+          <CardDescription>The latest calls your agents handled.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : calls.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No calls yet.</p>
+          ) : (
+            <>
+              {calls.map((call) => (
+                <Link
+                  key={call.id}
+                  href={`/dashboard/calls/${call.id}`}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2 hover:bg-muted/50"
+                >
+                  <span className="text-sm">
+                    {formatDateTime(call.startedAt)} · {call.language}
+                  </span>
+                  <CallStatusBadge status={call.status} />
+                </Link>
+              ))}
+              <Link href="/dashboard/calls" className="text-xs text-muted-foreground underline underline-offset-2">
+                View all calls
+              </Link>
+            </>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Upcoming appointments</CardTitle>
+          <CardDescription>What's booked next.</CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-2">
+          {loading ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : appointments.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing upcoming.</p>
+          ) : (
+            <>
+              {appointments.map((appointment) => (
+                <div
+                  key={appointment.id}
+                  className="flex items-center justify-between gap-2 rounded-md border border-border px-3 py-2"
+                >
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium">{appointment.title}</span>
+                    <span className="text-xs text-muted-foreground">
+                      {formatDateTime(appointment.startsAt)}
+                      {appointment.callId ? " · booked by AI" : ""}
+                    </span>
+                  </div>
+                  <Badge variant="outline">{appointment.status}</Badge>
+                </div>
+              ))}
+              <Link
+                href="/dashboard/appointments"
+                className="text-xs text-muted-foreground underline underline-offset-2"
+              >
+                View all appointments
+              </Link>
+            </>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
 export default function DashboardOverviewPage() {
   const { user, activeOrganization, activeRole, memberships } = useAuth();
 
@@ -181,6 +299,8 @@ export default function DashboardOverviewPage() {
           )}
         </CardContent>
       </Card>
+
+      {activeOrganization ? <ActivitySnapshot orgId={activeOrganization.id} /> : null}
 
       {memberships.length > 0 ? <OrganizationSwitcher /> : <CreateOrganization />}
     </div>

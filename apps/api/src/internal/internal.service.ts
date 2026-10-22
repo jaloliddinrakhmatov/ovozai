@@ -384,6 +384,7 @@ export class InternalService {
         organizationId,
         customerId,
         agentId: call.agentId,
+        callId: call.id,
         title: dto.title,
         notes: dto.notes,
         startsAt: start,

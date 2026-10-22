@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
   roleSatisfies,
+  type AppointmentDto,
   type CallDto,
   type CallEventDto,
   type RecordingUrlResponse,
@@ -28,6 +29,7 @@ import {
   getCallTranscript,
   listCallEvents,
 } from "@/lib/calls-api";
+import { listAppointments } from "@/lib/appointments-api";
 import { describeError } from "@/lib/form";
 import { formatDateTime, formatDuration } from "@/lib/datetime";
 import { CallStatusBadge } from "@/components/call-status-badge";
@@ -153,6 +155,63 @@ function TranscriptPanel({ callId }: { callId: string }) {
                   <span className="text-xs text-muted-foreground">{formatDuration(turn.startMs / 1000)}</span>
                 </div>
                 <p className="whitespace-pre-wrap text-sm">{turn.text}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+function AppointmentsPanel({ callId }: { callId: string }) {
+  const [appointments, setAppointments] = useState<AppointmentDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const result = await listAppointments({ callId });
+        if (!cancelled) setAppointments(result.data);
+      } catch (err) {
+        if (!cancelled) setError(describeError(err).message);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [callId]);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Appointments booked on this call</CardTitle>
+        <CardDescription>What the AI scheduled while handling this call.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : appointments.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No appointments were booked on this call.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {appointments.map((appointment) => (
+              <li
+                key={appointment.id}
+                className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border px-4 py-3"
+              >
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{appointment.title}</span>
+                  <span className="text-xs text-muted-foreground">
+                    {formatDateTime(appointment.startsAt)}
+                  </span>
+                </div>
+                <Badge variant="outline">{appointment.status}</Badge>
               </li>
             ))}
           </ul>
@@ -334,6 +393,7 @@ export default function CallDetailPage() {
         <>
           <CallMetadata call={call} />
           <TranscriptPanel callId={callId} />
+          <AppointmentsPanel callId={callId} />
           <EventsPanel callId={callId} />
           <RecordingPanel callId={callId} canAccess={canAccessRecording} />
         </>

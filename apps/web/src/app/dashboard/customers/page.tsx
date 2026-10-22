@@ -127,6 +127,7 @@ export default function CustomersPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
 
   // Draft filter inputs vs the applied filters used for fetching.
   const [qDraft, setQDraft] = useState("");
@@ -258,6 +259,21 @@ export default function CustomersPage() {
                     ) : null}
                   </div>
                   <div className="flex items-center gap-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      title="Copy the customer ID (used by the compliance erasure tool)"
+                      onClick={() => {
+                        void navigator.clipboard?.writeText(customer.id);
+                        setCopiedId(customer.id);
+                        window.setTimeout(
+                          () => setCopiedId((current) => (current === customer.id ? null : current)),
+                          1500,
+                        );
+                      }}
+                    >
+                      {copiedId === customer.id ? "Copied" : "Copy ID"}
+                    </Button>
                     <Link
                       href={`/dashboard/customers/${customer.id}`}
                       className="inline-flex h-9 items-center justify-center rounded-md border border-input bg-background px-3 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground"

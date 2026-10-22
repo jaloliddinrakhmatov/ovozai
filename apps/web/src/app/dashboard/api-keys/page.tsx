@@ -57,10 +57,20 @@ function CreateApiKeyForm({ onCreated }: { onCreated: () => void }) {
       .map((scope) => scope.trim())
       .filter((scope) => scope.length > 0);
 
+    let expiresAtIso: string | undefined;
+    if (expiresAt) {
+      const date = new Date(expiresAt);
+      if (Number.isNaN(date.getTime())) {
+        setFieldErrors({ expiresAt: "Enter a valid expiry date." });
+        return;
+      }
+      expiresAtIso = date.toISOString();
+    }
+
     const parsed = createApiKeyRequestSchema.safeParse({
       name,
       ...(scopeList.length > 0 ? { scopes: scopeList } : {}),
-      ...(expiresAt ? { expiresAt: new Date(expiresAt).toISOString() } : {}),
+      ...(expiresAtIso ? { expiresAt: expiresAtIso } : {}),
     });
     if (!parsed.success) {
       setFieldErrors(zodFieldErrors(parsed.error));

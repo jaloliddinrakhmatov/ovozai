@@ -4,10 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { registerRequestSchema } from "@ovozai/contracts";
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle } from "@ovozai/ui";
+import { Alert, Button } from "@ovozai/ui";
 import { useAuth } from "@/lib/auth-context";
 import { describeError, zodFieldErrors, type FieldErrors } from "@/lib/form";
 import { FormField } from "@/components/form-field";
+import { AuthShell } from "@/components/landing/auth-shell";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -56,59 +57,56 @@ export default function RegisterPage() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Create your OvozAI account</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-            {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+    <AuthShell
+      title="Create your account"
+      subtitle="Launch your AI voice receptionist — free, in minutes."
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link href="/login" className="font-medium text-white underline underline-offset-4">
+            Sign in
+          </Link>
+        </>
+      }
+    >
+      <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+        {formError ? <Alert variant="destructive">{formError}</Alert> : null}
 
-            <FormField
-              label="Name"
-              type="text"
-              name="name"
-              autoComplete="name"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              error={fieldErrors.name}
-              placeholder="Optional"
-            />
-            <FormField
-              label="Email"
-              type="email"
-              name="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-            />
-            <FormField
-              label="Password"
-              type="password"
-              name="password"
-              autoComplete="new-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-            />
+        <FormField
+          label="Name"
+          type="text"
+          name="name"
+          autoComplete="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          error={fieldErrors.name}
+          placeholder="Optional"
+        />
+        <FormField
+          label="Email"
+          type="email"
+          name="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          required
+        />
+        <FormField
+          label="Password"
+          type="password"
+          name="password"
+          autoComplete="new-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          required
+        />
 
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Creating account…" : "Create account"}
-            </Button>
-          </form>
-
-          <p className="mt-4 text-sm text-muted-foreground">
-            Already have an account?{" "}
-            <Link href="/login" className="font-medium text-foreground underline">
-              Sign in
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </main>
+        <Button type="submit" disabled={submitting} className="mt-1 w-full rounded-full">
+          {submitting ? "Creating account…" : "Create account"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

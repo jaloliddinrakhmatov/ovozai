@@ -23,6 +23,7 @@ export function LandingNav() {
   const links = [
     { href: "#features", label: "Features" },
     { href: "#how", label: "How it works" },
+    { href: "#pricing", label: "Pricing" },
     { href: "#faq", label: "FAQ" },
   ];
 
@@ -34,7 +35,7 @@ export function LandingNav() {
     >
       <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-5 py-4">
         <Link href="/" className="flex items-center gap-2">
-          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 text-sm font-bold text-black">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-to-br from-[var(--lp-accent)] to-[var(--lp-accent-2)] text-sm font-bold text-black">
             O
           </span>
           <span className="text-[15px] font-semibold tracking-tight text-white">

@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { LandingNav } from "@/components/landing/landing-nav";
 import { Reveal } from "@/components/landing/reveal";
 import { Faq } from "@/components/landing/faq";
+import { ShaderCanvas } from "@/components/landing/shader-canvas";
 
 /* --------------------------------- data ---------------------------------- */
 
@@ -96,6 +97,60 @@ const FAQS = [
   {
     q: "Is my customers' data safe?",
     a: "Each business is fully isolated, calls are recorded only with consent, and you control retention and erasure. Compliance was built in, not bolted on.",
+  },
+] as const;
+
+const INDUSTRIES = [
+  "Clinics",
+  "Dental",
+  "Salons & spas",
+  "Repair & service",
+  "Education",
+  "Hospitality",
+] as const;
+
+const PLANS = [
+  {
+    name: "Free",
+    price: "0",
+    period: "forever",
+    cta: "Get started",
+    highlight: false,
+    features: [
+      "1 AI agent",
+      "100 call-minutes / month",
+      "Uzbek · Russian · English",
+      "Knowledge base & booking",
+      "Browser test agent",
+    ],
+  },
+  {
+    name: "Starter",
+    price: "490,000",
+    period: "so'm / month",
+    cta: "Start free",
+    highlight: true,
+    features: [
+      "5 AI agents",
+      "1,000 call-minutes / month",
+      "Everything in Free",
+      "Webhooks & integrations",
+      "Call recordings & analytics",
+    ],
+  },
+  {
+    name: "Growth",
+    price: "1,490,000",
+    period: "so'm / month",
+    cta: "Start free",
+    highlight: false,
+    features: [
+      "20 AI agents",
+      "5,000 call-minutes / month",
+      "Everything in Starter",
+      "Priority support",
+      "Compliance controls",
+    ],
   },
 ] as const;
 
@@ -208,6 +263,25 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ---------------------------- INDUSTRIES -------------------------- */}
+        <section className="mx-auto w-full max-w-6xl px-5 pb-6">
+          <Reveal>
+            <p className="text-center text-xs uppercase tracking-[0.2em] text-white/35">
+              Built for local businesses
+            </p>
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+              {INDUSTRIES.map((x) => (
+                <span
+                  key={x}
+                  className="rounded-full border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-white/60 transition-colors hover:border-white/20 hover:text-white/80"
+                >
+                  {x}
+                </span>
+              ))}
+            </div>
+          </Reveal>
+        </section>
+
         {/* ----------------------------- FEATURES --------------------------- */}
         <section id="features" className="mx-auto w-full max-w-6xl scroll-mt-24 px-5 py-20">
           <Reveal>
@@ -222,7 +296,7 @@ export default function HomePage() {
               <Reveal key={f.title} delay={(i % 3) * 90} as="div">
                 <article className="group relative h-full overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] p-6 transition-all duration-300 hover:-translate-y-1 hover:border-white/20 hover:bg-white/[0.04]">
                   <div
-                    className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-violet-500/20 to-cyan-400/20 opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100"
+                    className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-gradient-to-br from-[rgba(var(--lp-accent-rgb),0.2)] to-[rgba(var(--lp-accent-2-rgb),0.2)] opacity-0 blur-2xl transition-opacity duration-500 group-hover:opacity-100"
                     aria-hidden
                   />
                   <div className="relative">
@@ -308,6 +382,70 @@ export default function HomePage() {
           </div>
         </section>
 
+        {/* ----------------------------- PRICING ---------------------------- */}
+        <section id="pricing" className="mx-auto w-full max-w-6xl scroll-mt-24 px-5 py-20">
+          <Reveal>
+            <div className="text-center">
+              <SectionLabel center>Pricing</SectionLabel>
+              <h2 className="font-display mt-4 text-balance text-3xl font-semibold tracking-tight sm:text-4xl lg:text-5xl">
+                Simple plans that grow with you.
+              </h2>
+              <p className="mx-auto mt-4 max-w-lg text-pretty text-white/55">
+                Start free and upgrade when you need more agents and minutes. No card to begin.
+              </p>
+            </div>
+          </Reveal>
+
+          <div className="mt-14 grid gap-5 lg:grid-cols-3">
+            {PLANS.map((p, i) => (
+              <Reveal key={p.name} delay={i * 100} as="div">
+                <div
+                  className={`relative flex h-full flex-col rounded-2xl border p-7 transition-all duration-300 ${
+                    p.highlight
+                      ? "border-white/25 bg-white/[0.05] shadow-[0_0_60px_-20px_rgba(var(--lp-accent-rgb),0.6)]"
+                      : "border-white/10 bg-white/[0.02] hover:border-white/20"
+                  }`}
+                >
+                  {p.highlight ? (
+                    <span className="absolute -top-3 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-gradient-to-r from-[var(--lp-accent)] to-[var(--lp-accent-2)] px-3 py-1 text-xs font-semibold text-black">
+                      Most popular
+                    </span>
+                  ) : null}
+                  <h3 className="text-lg font-semibold text-white">{p.name}</h3>
+                  <div className="mt-4 flex items-end gap-2">
+                    <span className="font-display text-4xl font-semibold text-white">
+                      {p.price === "0" ? "Free" : p.price}
+                    </span>
+                    {p.price !== "0" ? (
+                      <span className="pb-1.5 text-sm text-white/45">{p.period}</span>
+                    ) : (
+                      <span className="pb-1.5 text-sm text-white/45">{p.period}</span>
+                    )}
+                  </div>
+                  <ul className="mt-6 flex flex-1 flex-col gap-3">
+                    {p.features.map((f) => (
+                      <li key={f} className="flex items-start gap-2.5 text-sm text-white/65">
+                        <CheckMark className="mt-0.5 shrink-0 text-[var(--lp-accent-2)]" />
+                        {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <Link
+                    href="/register"
+                    className={`mt-8 inline-flex items-center justify-center rounded-full px-5 py-3 text-sm font-semibold transition-all ${
+                      p.highlight
+                        ? "bg-white text-black hover:-translate-y-0.5"
+                        : "border border-white/15 bg-white/5 text-white hover:bg-white/10"
+                    }`}
+                  >
+                    {p.cta}
+                  </Link>
+                </div>
+              </Reveal>
+            ))}
+          </div>
+        </section>
+
         {/* ------------------------------- FAQ ------------------------------ */}
         <section id="faq" className="mx-auto w-full max-w-3xl scroll-mt-24 px-5 py-20">
           <Reveal>
@@ -328,7 +466,7 @@ export default function HomePage() {
           <Reveal>
             <div className="relative overflow-hidden rounded-[2rem] border border-white/10 px-6 py-16 text-center sm:py-20">
               <div
-                className="lp-aurora pointer-events-none absolute left-1/2 top-1/2 h-[120%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(124,92,255,0.35),_transparent_60%)] blur-2xl"
+                className="lp-aurora pointer-events-none absolute left-1/2 top-1/2 h-[120%] w-[80%] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,_rgba(var(--lp-accent-rgb),0.35),_transparent_60%)] blur-2xl"
                 aria-hidden
               />
               <div className="relative">
@@ -363,7 +501,7 @@ export default function HomePage() {
       <footer className="relative z-10 border-t border-white/10">
         <div className="mx-auto flex w-full max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 text-sm text-white/40 sm:flex-row">
           <div className="flex items-center gap-2">
-            <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-violet-500 to-cyan-400 text-xs font-bold text-black">
+            <span className="grid h-6 w-6 place-items-center rounded-md bg-gradient-to-br from-[var(--lp-accent)] to-[var(--lp-accent-2)] text-xs font-bold text-black">
               O
             </span>
             <span className="text-white/70">OvozAI</span>
@@ -391,7 +529,7 @@ const MARQUEE = [
 function SectionLabel({ children, center = false }: { children: ReactNode; center?: boolean }) {
   return (
     <div className={`flex items-center gap-2 ${center ? "justify-center" : ""}`}>
-      <span className="h-px w-6 bg-gradient-to-r from-violet-400 to-cyan-400" />
+      <span className="h-px w-6 bg-gradient-to-r from-[var(--lp-accent)] to-[var(--lp-accent-2)]" />
       <span className="text-xs font-semibold uppercase tracking-[0.2em] text-white/45">
         {children}
       </span>
@@ -410,13 +548,15 @@ function Check({ children }: { children: ReactNode }) {
 
 function BackgroundFX() {
   return (
-    <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden" aria-hidden>
-      {/* aurora blobs */}
-      <div className="lp-aurora absolute -top-40 left-1/4 h-[36rem] w-[36rem] rounded-full bg-[radial-gradient(circle,_rgba(124,92,255,0.22),_transparent_60%)] blur-3xl" />
+    <div className="pointer-events-none fixed inset-0 z-0 overflow-hidden" aria-hidden>
+      {/* aurora blobs — CSS fallback behind the shader */}
+      <div className="lp-aurora absolute -top-40 left-1/4 h-[36rem] w-[36rem] rounded-full bg-[radial-gradient(circle,_rgba(var(--lp-accent-rgb),0.22),_transparent_60%)] blur-3xl" />
       <div
-        className="lp-aurora absolute -top-24 right-0 h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,_rgba(34,211,238,0.16),_transparent_60%)] blur-3xl"
+        className="lp-aurora absolute -top-24 right-0 h-[30rem] w-[30rem] rounded-full bg-[radial-gradient(circle,_rgba(var(--lp-accent-2-rgb),0.16),_transparent_60%)] blur-3xl"
         style={{ animationDelay: "-6s" }}
       />
+      {/* WebGL shader (covers the blobs when available) */}
+      <ShaderCanvas />
       {/* grid */}
       <div
         className="absolute inset-0 opacity-[0.04]"
@@ -436,11 +576,11 @@ function BackgroundFX() {
 function CallCard() {
   return (
     <div className="lp-float relative mx-auto max-w-md">
-      <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-violet-500/20 to-cyan-400/10 blur-2xl" aria-hidden />
+      <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-br from-[rgba(var(--lp-accent-rgb),0.2)] to-[rgba(var(--lp-accent-2-rgb),0.1)] blur-2xl" aria-hidden />
       <div className="relative overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/[0.03] p-6 backdrop-blur-xl">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-black">
+            <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-[var(--lp-accent)] to-[var(--lp-accent-2)] text-black">
               <PhoneIcon />
             </span>
             <div>
@@ -459,7 +599,7 @@ function CallCard() {
           {WAVE.map((h, i) => (
             <span
               key={i}
-              className="lp-bar w-1 rounded-full bg-gradient-to-t from-violet-400 to-cyan-300"
+              className="lp-bar w-1 rounded-full bg-gradient-to-t from-[var(--lp-accent)] to-[var(--lp-accent-2)]"
               style={{ height: `${h}%`, animationDelay: `${i * 70}ms` }}
             />
           ))}
@@ -501,7 +641,7 @@ function TranscriptCard() {
             <div
               className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-sm ${
                 t.agent
-                  ? "bg-gradient-to-br from-violet-500/30 to-cyan-400/20 text-white"
+                  ? "bg-gradient-to-br from-[rgba(var(--lp-accent-rgb),0.3)] to-[rgba(var(--lp-accent-2-rgb),0.2)] text-white"
                   : "bg-white/5 text-white/80"
               }`}
             >
@@ -530,7 +670,7 @@ function Bubble({
       <div
         className={`max-w-[88%] rounded-2xl px-3.5 py-2 text-[13px] leading-snug ${
           agent
-            ? "bg-gradient-to-br from-violet-500/30 to-cyan-400/20 text-white"
+            ? "bg-gradient-to-br from-[rgba(var(--lp-accent-rgb),0.3)] to-[rgba(var(--lp-accent-2-rgb),0.2)] text-white"
             : "bg-white/5 text-white/80"
         }`}
       >

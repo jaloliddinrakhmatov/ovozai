@@ -4,10 +4,11 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { loginRequestSchema } from "@ovozai/contracts";
-import { Alert, Button, Card, CardContent, CardHeader, CardTitle } from "@ovozai/ui";
+import { Alert, Button } from "@ovozai/ui";
 import { useAuth } from "@/lib/auth-context";
 import { describeError, zodFieldErrors, type FieldErrors } from "@/lib/form";
 import { FormField } from "@/components/form-field";
+import { AuthShell } from "@/components/landing/auth-shell";
 
 /** Read a safe, same-app redirect target from the `?next=` query parameter. */
 function readNextParam(): string {
@@ -60,49 +61,46 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-4 py-12">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Sign in to OvozAI</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
-            {formError ? <Alert variant="destructive">{formError}</Alert> : null}
+    <AuthShell
+      title="Welcome back"
+      subtitle="Sign in to your OvozAI dashboard."
+      footer={
+        <>
+          No account?{" "}
+          <Link href="/register" className="font-medium text-white underline underline-offset-4">
+            Create one
+          </Link>
+        </>
+      }
+    >
+      <form className="flex flex-col gap-4" onSubmit={onSubmit} noValidate>
+        {formError ? <Alert variant="destructive">{formError}</Alert> : null}
 
-            <FormField
-              label="Email"
-              type="email"
-              name="email"
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              error={fieldErrors.email}
-              required
-            />
-            <FormField
-              label="Password"
-              type="password"
-              name="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              error={fieldErrors.password}
-              required
-            />
+        <FormField
+          label="Email"
+          type="email"
+          name="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          error={fieldErrors.email}
+          required
+        />
+        <FormField
+          label="Password"
+          type="password"
+          name="password"
+          autoComplete="current-password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          error={fieldErrors.password}
+          required
+        />
 
-            <Button type="submit" disabled={submitting}>
-              {submitting ? "Signing in…" : "Sign in"}
-            </Button>
-          </form>
-
-          <p className="mt-4 text-sm text-muted-foreground">
-            No account?{" "}
-            <Link href="/register" className="font-medium text-foreground underline">
-              Create one
-            </Link>
-          </p>
-        </CardContent>
-      </Card>
-    </main>
+        <Button type="submit" disabled={submitting} className="mt-1 w-full rounded-full">
+          {submitting ? "Signing in…" : "Sign in"}
+        </Button>
+      </form>
+    </AuthShell>
   );
 }

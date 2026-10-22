@@ -187,3 +187,28 @@ body {
     animation: none !important;
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Brand accent (easy to retune) + a scoped dark theme for marketing/auth so
+   @ovozai/ui components render dark inside, without touching the dashboard.
+   --------------------------------------------------------------------------- */
+:root {
+  --lp-accent: #6366f1; /* indigo */
+  --lp-accent-2: #d946ef; /* fuchsia */
+  --lp-accent-rgb: 99, 102, 241;
+  --lp-accent-2-rgb: 217, 70, 239;
+}
+
+.lp-dark {
+  --background: #06070b;
+  --foreground: #f4f4f6;
+  --primary: #ffffff;
+  --primary-foreground: #0a0b10;
+  --accent: rgba(255, 255, 255, 0.06);
+  --accent-foreground: #f4f4f6;
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: #9aa1ad;
+  --border: rgba(255, 255, 255, 0.1);
+  --input: rgba(255, 255, 255, 0.16);
+  --ring: var(--lp-accent);
+}

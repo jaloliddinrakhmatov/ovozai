@@ -55,6 +55,16 @@ export class WebSocketTransport implements AudioTransport {
         this.enqueue({ audio: this.oneUtterance(text), language: message.language, text });
         return;
       }
+      case "caller_audio": {
+        // A recorded mic utterance for server-side STT: hand the raw bytes to
+        // the session as an audio turn (no text → the STT provider transcribes).
+        const base64 = (message.dataBase64 ?? "").toString();
+        if (!base64) return;
+        const bytes = new Uint8Array(Buffer.from(base64, "base64"));
+        if (bytes.length === 0) return;
+        this.enqueue({ audio: this.oneAudioChunk(bytes), language: message.language });
+        return;
+      }
       case "barge_in":
         this.bargeRequested = true;
         return;
@@ -88,6 +98,11 @@ export class WebSocketTransport implements AudioTransport {
 
   private async *oneUtterance(text: string): AsyncIterable<AudioChunk> {
     yield textToAudio(text);
+  }
+
+  /** A single real-audio chunk (browser mic is opus-in-webm at 48 kHz). */
+  private async *oneAudioChunk(bytes: Uint8Array): AsyncIterable<AudioChunk> {
+    yield { data: bytes, sampleRate: 48_000, encoding: "opus" };
   }
 
   async nextCallerTurn(): Promise<CallerTurn | null> {

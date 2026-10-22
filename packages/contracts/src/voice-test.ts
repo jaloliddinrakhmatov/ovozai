@@ -19,6 +19,8 @@ export type TestSessionResponse = z.infer<typeof testSessionResponseSchema>;
 /** Messages the browser sends to the gateway over the WebSocket. */
 export type VoiceClientMessage =
   | { type: "caller_text"; text: string; language?: string }
+  /** A recorded microphone utterance (base64) for server-side STT. */
+  | { type: "caller_audio"; dataBase64: string; mime: string; language?: string }
   | { type: "barge_in" }
   | { type: "hangup" };
 
@@ -26,9 +28,12 @@ export type VoiceClientMessage =
 export type VoiceServerMessage =
   | { type: "state"; state: "connecting" | "ready" | "in_call" | "ended" }
   | { type: "call"; callId: string }
-  /** Session config: whether the server supplies spoken audio (real TTS). When
-   *  true the browser plays `agent_audio`; when false it speaks captions itself. */
-  | { type: "config"; serverAudio: boolean }
+  /** Session config: whether the server supplies spoken audio (real TTS) and
+   *  whether server-side STT is available. When `serverAudio` is true the browser
+   *  plays `agent_audio`; when false it speaks captions itself. When `sttServer`
+   *  is true the browser streams recorded mic audio (`caller_audio`); otherwise it
+   *  uses the browser's own speech recognition. */
+  | { type: "config"; serverAudio: boolean; sttServer?: boolean }
   | { type: "caption"; role: "AGENT" | "CALLER"; text: string; language?: string }
   /** Dev-bridge playback (no real audio) — the agent's spoken text. */
   | { type: "agent_audio_text"; text: string }

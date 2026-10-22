@@ -110,6 +110,9 @@ async function main(): Promise<void> {
   // the browser to play; otherwise the browser speaks the text itself.
   const ttsKind = config.ttsProvider ?? config.voiceProvider;
   const serverAudio = ttsKind === "neuronai" || ttsKind === "openai";
+  // Server-side STT is the OpenAI-compatible transcription path (e.g. Groq Whisper).
+  const sttKind = config.sttProvider ?? config.voiceProvider;
+  const sttServer = sttKind === "openai";
   const gateway = startVoiceGateway({
     port: config.wsPort,
     hmacSecret: config.hmacSecret,
@@ -118,6 +121,7 @@ async function main(): Promise<void> {
     storage,
     llmModel: config.llmModel,
     serverAudio,
+    sttServer,
     maxSessions: config.maxConcurrentSessions,
     logger: (message) => console.warn("[voice-worker]", message),
   });

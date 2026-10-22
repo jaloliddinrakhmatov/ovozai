@@ -107,11 +107,21 @@ export class OpenAiSttProvider implements SttProvider {
 
   async *transcribe(audio: AsyncIterable<AudioChunk>, options: SttOptions): AsyncIterable<SttResult> {
     const parts: Uint8Array[] = [];
-    for await (const chunk of audio) parts.push(chunk.data);
-    const blob = new Blob(parts, { type: "audio/wav" });
+    let encoding: AudioChunk["encoding"] = "wav";
+    for await (const chunk of audio) {
+      parts.push(chunk.data);
+      encoding = chunk.encoding;
+    }
+    // Send the container Whisper expects for the captured format (browser mic is
+    // typically opus-in-webm; the dev/PSTN path is wav).
+    const { type, filename } =
+      encoding === "opus"
+        ? { type: "audio/webm", filename: "audio.webm" }
+        : { type: "audio/wav", filename: "audio.wav" };
+    const blob = new Blob(parts, { type });
 
     const form = new FormData();
-    form.set("file", blob, "audio.wav");
+    form.set("file", blob, filename);
     form.set("model", this.config.model ?? "whisper-1");
     const language = options.languages[0];
     if (language) form.set("language", language);

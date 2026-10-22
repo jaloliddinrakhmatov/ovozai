@@ -78,6 +78,7 @@ export default function TestAgentPage() {
   const [speakResponses, setSpeakResponses] = useState(true);
   const [listening, setListening] = useState(false);
   const [serverAudio, setServerAudio] = useState(false);
+  const [sttServer, setSttServer] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -85,6 +86,10 @@ export default function TestAgentPage() {
   const manualStopRef = useRef(false);
   const optsRef = useRef({ speak: true, language: "uz" });
   const serverAudioRef = useRef(false);
+  const sttServerRef = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaChunksRef = useRef<Blob[]>([]);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
   const audioQueueRef = useRef<string[]>([]);
   const audioPlayingRef = useRef(false);
   const audioElRef = useRef<HTMLAudioElement | null>(null);
@@ -119,6 +124,8 @@ export default function TestAgentPage() {
       closeWs();
       try {
         recognitionRef.current?.stop();
+        mediaRecorderRef.current?.stop();
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
       } catch {
         /* ignore */
       }
@@ -170,6 +177,8 @@ export default function TestAgentPage() {
         case "config":
           serverAudioRef.current = message.serverAudio;
           setServerAudio(message.serverAudio);
+          sttServerRef.current = message.sttServer ?? false;
+          setSttServer(message.sttServer ?? false);
           break;
         case "state":
           if (message.state === "in_call") setStatus("in_call");
@@ -252,7 +261,59 @@ export default function TestAgentPage() {
     }
   };
 
+  const sendCallerAudio = async (blob: Blob, mime: string) => {
+    const ws = wsRef.current;
+    if (!ws || ws.readyState !== WebSocket.OPEN || blob.size === 0) return;
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+    ws.send(JSON.stringify({ type: "caller_audio", dataBase64: btoa(binary), mime, language }));
+  };
+
+  const stopRecording = () => {
+    setListening(false);
+    try {
+      mediaRecorderRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    mediaRecorderRef.current = null;
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaStreamRef.current = stream;
+      const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/webm";
+      const recorder = new MediaRecorder(stream, { mimeType: mime });
+      mediaChunksRef.current = [];
+      recorder.ondataavailable = (event) => {
+        if (event.data.size > 0) mediaChunksRef.current.push(event.data);
+      };
+      recorder.onstop = () => {
+        const blob = new Blob(mediaChunksRef.current, { type: mime });
+        void sendCallerAudio(blob, mime);
+        mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+        mediaStreamRef.current = null;
+      };
+      mediaRecorderRef.current = recorder;
+      recorder.start();
+      setListening(true);
+    } catch {
+      setError("Microphone access was denied or is unavailable.");
+      setListening(false);
+    }
+  };
+
   const toggleListening = () => {
+    // With server-side STT, record the mic and send the audio to be transcribed.
+    if (sttServerRef.current) {
+      if (listening) stopRecording();
+      else void startRecording();
+      return;
+    }
     if (listening) {
       // Stop → send the WHOLE accumulated utterance as one turn.
       manualStopRef.current = true;
@@ -368,8 +429,11 @@ export default function TestAgentPage() {
               </Button>
             )}
             <Button variant="outline" onClick={toggleListening} disabled={!connected}>
-              {listening ? "⏹ Stop & send" : "🎤 Speak"}
+              {listening ? "⏹ Stop & send" : sttServer ? "🎙️ Record" : "🎤 Speak"}
             </Button>
+            <span className="text-xs text-muted-foreground">
+              {sttServer ? "server STT" : "browser STT"}
+            </span>
             {serverAudio ? (
               <span className="text-sm text-muted-foreground">🔊 Native voice (server TTS)</span>
             ) : (

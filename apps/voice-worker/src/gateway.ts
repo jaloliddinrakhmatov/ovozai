@@ -50,6 +50,8 @@ export interface VoiceGatewayDeps {
   llmModel?: string;
   /** True when a real TTS provider supplies audio to play in the browser. */
   serverAudio?: boolean;
+  /** True when a real STT provider is configured (browser streams mic audio). */
+  sttServer?: boolean;
   maxSessions: number;
   logger?: (message: string) => void;
 }
@@ -93,10 +95,11 @@ async function runSession(
   deps: VoiceGatewayDeps,
 ): Promise<void> {
   const serverAudio = deps.serverAudio ?? false;
+  const sttServer = deps.sttServer ?? false;
   const transport = new WebSocketTransport(ws, serverAudio);
   try {
     transport.send({ type: "state", state: "connecting" });
-    transport.send({ type: "config", serverAudio });
+    transport.send({ type: "config", serverAudio, sttServer });
     const created = await deps.internal.createCall({
       agentId: payload.agentId,
       direction: "INBOUND",

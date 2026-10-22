@@ -177,10 +177,17 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   `INTERNAL_HMAC_SECRET`); the worker verifies it (`verifyTestTicket`) — no auth stack in the
   worker. The dashboard **Agents → Test** page (`/dashboard/agents/[id]/test`) does type-to-talk +
   live captions + barge-in. A caller turn may carry pre-transcribed `text` (type-to-talk or
-  browser STT) → `CallSession` skips server STT. **Free real path (wired + live-verified):** real
-  **LLM via Groq** (`VOICE_LLM_PROVIDER=openai` + `VOICE_PROVIDER_BASE_URL=api.groq.com/openai/v1`
-  + `VOICE_LLM_MODEL=qwen/qwen3.8-27b`; Groq `gpt-oss-*` return empty content — use Qwen) + the
-  browser's **Web Speech API** for free STT/TTS (the Test page `🎤 Speak` + speaks replies).
+  browser STT) → `CallSession` skips server STT; or a recorded mic utterance (`caller_audio`,
+  base64) → the server STT provider transcribes it. The gateway advertises `sttServer` (true when
+  `VOICE_STT_PROVIDER=openai`) in its `config` message; the Test page then records the mic
+  (MediaRecorder → webm/opus) instead of using browser Web Speech. **Free real STT via Groq
+  Whisper** (same key as the LLM): `VOICE_STT_PROVIDER=openai` + `VOICE_STT_BASE_URL=
+  https://api.groq.com/openai/v1` + `VOICE_STT_MODEL=whisper-large-v3`. **Free real path (wired +
+  live-verified):** real **LLM via Groq** (`VOICE_LLM_PROVIDER=openai` +
+  `VOICE_PROVIDER_BASE_URL=api.groq.com/openai/v1` + `VOICE_LLM_MODEL=qwen/qwen3.8-27b`; Groq
+  `gpt-oss-*` return empty content — use Qwen) + the browser's **Web Speech API** for free STT/TTS
+  (the Test page `🎤 Speak` + speaks replies). `CallSession` detects the caller's language per turn
+  (`detectLanguage`) and drives TTS in it, so it follows mid-call Uzbek/Russian/English switches.
   `createVoiceProviders` now takes **per-modality** providers (`VOICE_STT/LLM/TTS_PROVIDER` +
   models), plus **per-modality credentials** (`VOICE_STT/LLM/TTS_API_KEY` + `_BASE_URL`), so STT/LLM/TTS
   mix freely (e.g. Groq LLM + NeuronAI TTS); the session strips `<think>…</think>` from reasoning

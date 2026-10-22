@@ -16,11 +16,18 @@ interface Caption {
 }
 
 // Minimal typing for the browser's free Web Speech API (Chrome).
+interface SpeechRecognitionResultLike extends ArrayLike<{ transcript: string }> {
+  isFinal: boolean;
+}
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
 interface SpeechRecognitionLike {
   lang: string;
   interimResults: boolean;
   continuous: boolean;
-  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
   onend: (() => void) | null;
   onerror: (() => void) | null;
   start(): void;
@@ -74,6 +81,8 @@ export default function TestAgentPage() {
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const speechBufferRef = useRef("");
+  const manualStopRef = useRef(false);
   const optsRef = useRef({ speak: true, language: "uz" });
   const serverAudioRef = useRef(false);
   const audioQueueRef = useRef<string[]>([]);
@@ -233,13 +242,26 @@ export default function TestAgentPage() {
     if (type === "hangup") closeWs();
   };
 
+  const sendCallerText = (raw: string) => {
+    const text = raw.trim();
+    const ws = wsRef.current;
+    if (text && ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: "caller_text", text, language }));
+    }
+  };
+
   const toggleListening = () => {
     if (listening) {
+      // Stop → send the WHOLE accumulated utterance as one turn.
+      manualStopRef.current = true;
       try {
         recognitionRef.current?.stop();
       } catch {
         /* ignore */
       }
+      sendCallerText(speechBufferRef.current);
+      speechBufferRef.current = "";
+      setInput("");
       setListening(false);
       return;
     }
@@ -254,17 +276,34 @@ export default function TestAgentPage() {
     }
     const recognition = new Recognition();
     recognition.lang = bcp47(language);
-    recognition.interimResults = false;
-    recognition.continuous = false;
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    speechBufferRef.current = "";
+    manualStopRef.current = false;
     recognition.onresult = (event) => {
-      const text = event.results?.[0]?.[0]?.transcript?.trim();
-      const ws = wsRef.current;
-      if (text && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: "caller_text", text, language }));
+      // Rebuild the full transcript from all results (finals + current interim),
+      // so nothing is sent until the user taps Stop.
+      let full = "";
+      for (let i = 0; i < event.results.length; i += 1) {
+        const piece = event.results[i]?.[0]?.transcript;
+        if (piece) full += (full ? " " : "") + piece.trim();
+      }
+      speechBufferRef.current = full;
+      setInput(full); // live preview while speaking
+    };
+    recognition.onend = () => {
+      // Chrome often stops on a short pause — keep listening until the user stops.
+      if (!manualStopRef.current) {
+        try {
+          recognition.start();
+        } catch {
+          /* ignore */
+        }
       }
     };
-    recognition.onend = () => setListening(false);
-    recognition.onerror = () => setListening(false);
+    recognition.onerror = () => {
+      if (!manualStopRef.current) setListening(false);
+    };
     recognitionRef.current = recognition;
     setListening(true);
     recognition.start();
@@ -327,7 +366,7 @@ export default function TestAgentPage() {
               </Button>
             )}
             <Button variant="outline" onClick={toggleListening} disabled={!connected}>
-              {listening ? "Stop listening" : "🎤 Speak"}
+              {listening ? "⏹ Stop & send" : "🎤 Speak"}
             </Button>
             {serverAudio ? (
               <span className="text-sm text-muted-foreground">🔊 Native voice (server TTS)</span>
@@ -345,8 +384,8 @@ export default function TestAgentPage() {
 
           {listening ? (
             <Alert>
-              Listening… speak now in {language.toUpperCase()}. (Free browser speech recognition —
-              best in Chrome; quality varies by language. You can also type below.)
+              🎙️ Listening in {language.toUpperCase()} — say your whole sentence, then tap{" "}
+              <strong>Stop &amp; send</strong>. Your words appear live in the box below.
             </Alert>
           ) : null}
 

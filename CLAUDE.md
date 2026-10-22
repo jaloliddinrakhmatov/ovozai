@@ -176,11 +176,15 @@ pnpm db:migrate:deploy       # apply migrations to a running DB
   issues a short-lived HMAC-signed ticket (`POST /agents/:id/test-session`, signed with
   `INTERNAL_HMAC_SECRET`); the worker verifies it (`verifyTestTicket`) — no auth stack in the
   worker. The dashboard **Agents → Test** page (`/dashboard/agents/[id]/test`) does type-to-talk +
-  live captions + barge-in today on the local **dev-bridge** (not real audio); **live mic STT /
-  natural TTS need a real provider** (see `docs/MULTILINGUAL_EVALUATION.md` — Google Chirp for
-  Uzbek). `createVoiceProviders` is still single-`provider`; adopting real Uzbek providers means
-  adding per-modality adapters. LiveKit (SIP/telephony) stays the separate, unwired boundary.
-  How-to + troubleshooting: `docs/VOICE_TESTING.md`.
+  live captions + barge-in. A caller turn may carry pre-transcribed `text` (type-to-talk or
+  browser STT) → `CallSession` skips server STT. **Free real path (wired + live-verified):** real
+  **LLM via Groq** (`VOICE_LLM_PROVIDER=openai` + `VOICE_PROVIDER_BASE_URL=api.groq.com/openai/v1`
+  + `VOICE_LLM_MODEL=qwen/qwen3.8-27b`; Groq `gpt-oss-*` return empty content — use Qwen) + the
+  browser's **Web Speech API** for free STT/TTS (the Test page `🎤 Speak` + speaks replies).
+  `createVoiceProviders` now takes **per-modality** providers (`VOICE_STT/LLM/TTS_PROVIDER` +
+  models), so STT/LLM/TTS mix freely; the session strips `<think>…</think>` from reasoning models.
+  Higher-quality Uzbek = add a server STT/TTS provider (`docs/MULTILINGUAL_EVALUATION.md`). LiveKit
+  (SIP/telephony) stays the separate, unwired boundary. How-to: `docs/VOICE_TESTING.md`.
 
 ## Verifying a change
 

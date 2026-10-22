@@ -14,10 +14,12 @@
 | Browser → voice-worker **WebSocket gateway** | ✅ real, wired, tested |
 | **Ticketed auth** (API-issued, HMAC-signed, short-lived) | ✅ |
 | Real **CallSession** (greeting, tools, transcript, lifecycle, barge-in) | ✅ |
-| **Type-to-talk** conversation (drives the real loop via the dev-bridge) | ✅ works now, no keys |
+| **Type-to-talk** conversation through the real loop | ✅ works now |
+| **Real LLM responses** (Groq, free) | ✅ with a free Groq key (§5) |
+| **Microphone speech-to-text** (browser Web Speech, Chrome) | ✅ free, in-browser |
+| **Spoken replies** (browser Web Speech TTS) | ✅ free, in-browser |
 | Call record + transcript in the dashboard | ✅ |
-| **Live microphone speech-to-text** | ⚠️ needs a real streaming STT provider (Google Chirp etc.) |
-| **Natural TTS audio playback** in the browser | ⚠️ needs a real TTS provider |
+| **Server-side** STT/TTS for higher Uzbek quality | ⚠️ optional, needs a provider key (§5) |
 
 The default providers are a **deterministic dev-bridge, not real speech**
 (`packages/integrations/src/providers-local.ts`). Type-to-talk exercises the entire
@@ -53,11 +55,12 @@ via `VOICE_WS_PUBLIC_URL`).
 1. On **Agents**, click **Test** next to the agent (→ `/dashboard/agents/<id>/test`).
 2. Click **Start test call**. The status badge goes **Live**, a call record is
    created (linked under the transcript), and the agent's **greeting** appears.
-3. Click **Enable microphone** to grant mic permission (this proves the browser
-   media flow; live transcription activates with a real STT provider — see §5).
-4. Use **type-to-talk**: pick a language, type what the caller would say, **Send**.
-   The agent transcribes → reasons (with tools) → responds, and both sides appear
-   as **live captions**. Try an Uzbek question, a booking request
+3. **Speak**: click **🎤 Speak** (grant mic), say something in the selected
+   language; the browser transcribes it and sends it. Keep **Speak responses** on
+   to hear the agent reply aloud. (Chrome recommended; quality varies by language.)
+4. Or **type-to-talk**: pick a language, type what the caller would say, **Send**.
+   The agent reasons (with a real LLM + tools) and responds; both sides appear as
+   **live captions**. Try an Uzbek question, a booking request
    ("Ertaga soat 15:00 ga yozilmoqchiman"), or "Rahmat, xayr" to end.
 5. **Interrupt (barge-in)** stops the agent mid-response; **Hang up** ends the call.
 6. Open **Calls** — the session is there with its full transcript.
@@ -72,19 +75,33 @@ The repo ships automated proof:
 - **Live:** with the stack up, the gateway path is exercised against the real API
   (ticket issue → WS session → `Call` persisted COMPLETED with a transcript).
 
-## 5. Turn on real speech (microphone + natural audio)
+## 5. Real speech for free (Groq LLM + browser Web Speech)
 
-Live mic STT and natural TTS need a real provider (see
-[`MULTILINGUAL_EVALUATION.md`](./MULTILINGUAL_EVALUATION.md) for the Uzbek
-recommendation — Google Chirp STT + ElevenLabs/local TTS). Once chosen:
+A **real** conversation with **no paid keys** is wired today:
 
-1. Set `VOICE_PROVIDER=openai` (or the new adapter) + the provider key(s) in `.env`
-   for **both** the voice-worker and the jobs-worker.
-2. Extend `VoiceProviderConfig` / `createVoiceProviders` with the per-modality
-   adapter(s) (implementing the existing `SttProvider` / `TtsProvider` interfaces).
-3. Stream mic PCM frames from the browser over the existing WS protocol (the
-   message contract already reserves the audio + barge-in paths) to the new
-   streaming STT, and play returned TTS audio frames back.
+- **LLM → Groq** (free, no credit card): a real model answers (verified live).
+- **STT + TTS → the browser's free Web Speech API** (Chrome): the mic transcribes
+  and the agent's replies are spoken aloud — no server audio keys needed.
+
+Setup (one free key):
+
+1. Get a free Groq key — [console.groq.com/keys](https://console.groq.com/keys) (email, ~30s, no card).
+2. In `.env` (the voice-worker reads it):
+   ```
+   VOICE_LLM_PROVIDER=openai
+   VOICE_PROVIDER_BASE_URL=https://api.groq.com/openai/v1
+   VOICE_PROVIDER_API_KEY=gsk_...
+   VOICE_LLM_MODEL=qwen/qwen3.8-27b
+   ```
+   (Use **`qwen/qwen3.8-27b`** — good Uzbek; Groq's `gpt-oss-*` return empty content.)
+3. Restart the voice-worker. On the Test page, click **🎤 Speak** (grant mic) or type,
+   and keep **Speak responses** on to hear replies.
+
+> The browser's STT/TTS Uzbek quality varies. For production-grade Uzbek, add a
+> **server-side** STT/TTS provider (Google Chirp, Groq Whisper, Mohir.ai, ElevenLabs) —
+> `createVoiceProviders` already supports per-modality providers (`VOICE_STT_PROVIDER` /
+> `VOICE_TTS_PROVIDER` + models); implement/point the adapter and stream audio over the
+> existing WS protocol. See [`MULTILINGUAL_EVALUATION.md`](./MULTILINGUAL_EVALUATION.md).
 
 ## 6. Troubleshooting
 

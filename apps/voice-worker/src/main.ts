@@ -21,8 +21,14 @@ const config = loadVoiceWorkerConfig();
 
 const providers = createVoiceProviders({
   provider: config.voiceProvider,
+  sttProvider: config.sttProvider,
+  llmProvider: config.llmProvider,
+  ttsProvider: config.ttsProvider,
   apiKey: config.providerApiKey,
   baseUrl: config.providerBaseUrl,
+  sttModel: config.sttModel,
+  llmModel: config.llmModel,
+  ttsModel: config.ttsModel,
 });
 const storage = createStorageProvider({
   provider: process.env.STORAGE_PROVIDER === "s3" ? "s3" : "local",
@@ -64,6 +70,7 @@ async function runDevCall(agentId: string, mode: string): Promise<void> {
     internal,
     transport: new SimulatedTransport(script),
     storage,
+    llmModel: config.llmModel,
     logger: (message) => console.warn("[voice-worker]", message),
   });
   await session.run();
@@ -93,6 +100,7 @@ async function main(): Promise<void> {
     internal,
     providers,
     storage,
+    llmModel: config.llmModel,
     maxSessions: config.maxConcurrentSessions,
     logger: (message) => console.warn("[voice-worker]", message),
   });

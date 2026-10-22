@@ -45,7 +45,9 @@ export class WebSocketTransport implements AudioTransport {
         const text = (message.text ?? "").toString().trim();
         if (!text) return;
         this.send({ type: "caption", role: "CALLER", text, language: message.language });
-        this.enqueue({ audio: this.oneUtterance(text), language: message.language });
+        // Pass the text through directly (skip server STT) and still provide
+        // dev-bridge audio for providers that expect an audio stream.
+        this.enqueue({ audio: this.oneUtterance(text), language: message.language, text });
         return;
       }
       case "barge_in":

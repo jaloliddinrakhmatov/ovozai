@@ -161,7 +161,12 @@ export class CallSession {
       this.turnCount += 1;
       const baseMs = this.turnCount * 2000;
 
-      const { text, language } = await this.transcribe(turn.audio, turn.language);
+      // A turn may arrive already transcribed (type-to-talk, or browser-side
+      // speech recognition) — then skip STT entirely. Otherwise run STT on audio.
+      const { text, language } =
+        turn.text != null
+          ? { text: turn.text.trim(), language: codeToLang(turn.language) }
+          : await this.transcribe(turn.audio, turn.language);
       if (!text) continue;
       await this.reportTurn("CALLER", text, baseMs, language ?? agent.defaultLanguage);
       this.messages.push({ role: "user", content: text });
@@ -246,7 +251,10 @@ export class CallSession {
         continue;
       }
 
-      return { kind: "speak", text: text.trim() || "I'm sorry, could you repeat that?" };
+      // Strip reasoning blocks some models (e.g. Qwen) emit before the answer,
+      // so the agent never speaks its chain-of-thought.
+      const spoken = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      return { kind: "speak", text: spoken || "I'm sorry, could you repeat that?" };
     }
     return { kind: "speak", text: "Let me connect you to a colleague." };
   }

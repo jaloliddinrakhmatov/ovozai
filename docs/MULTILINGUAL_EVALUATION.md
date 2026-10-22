@@ -123,10 +123,18 @@ with the date, provider versions, and dataset hash.
 | Item | State |
 | --- | --- |
 | Provider research + recommendation | ✅ this document |
-| Per-modality provider config + Google/ElevenLabs/Mohir adapters | ⬚ to build (needs the chosen provider **API keys**) |
+| **Per-modality provider config** (`createVoiceProviders` + env) | ✅ built |
+| **Free real LLM via Groq** (`qwen/qwen3.8-27b`, OpenAI-compatible) | ✅ **wired + live-verified** (browser Test Agent answered a real question through Groq) |
+| Browser STT + TTS (free Web Speech API, Chrome) | ✅ in the Test-Agent page |
+| Google Chirp / ElevenLabs / Mohir server-side adapters | ⬚ to build (needs the chosen provider **API keys**) |
 | `computeCer` + metric additions | ◐ small, buildable now |
 | Labeled UZ/RU/EN corpus with verified references | ⬚ needs recording + human verification |
-| Real measured WER/CER/latency numbers | ⛔ **blocked** on provider keys + the corpus — **not** fabricated here |
+| Real measured WER/CER/latency numbers | ⛔ **blocked** on server STT keys + the corpus — **not** fabricated here |
+
+> **Free path (implemented):** real LLM via **Groq** (free, no card) + **browser Web Speech API**
+> for STT/TTS. Set `VOICE_LLM_PROVIDER=openai`, `VOICE_PROVIDER_BASE_URL=https://api.groq.com/openai/v1`,
+> `VOICE_PROVIDER_API_KEY=gsk_…`, `VOICE_LLM_MODEL=qwen/qwen3.8-27b`. `gpt-oss-*` on Groq return
+> empty content (reasoning models) — use Qwen. See `docs/VOICE_TESTING.md`.
 
 **Needed from the business:** chosen provider accounts + API keys (Google Cloud,
 ElevenLabs, and/or a local UZ provider), and a few native speakers to record and

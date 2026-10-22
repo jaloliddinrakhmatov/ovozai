@@ -14,8 +14,16 @@ export interface VoiceWorkerConfig {
   livekitUrl: string;
   /** Provider selection for STT/LLM/TTS. "local" needs no keys. */
   voiceProvider: "local" | "openai";
+  /** Per-modality overrides (default to voiceProvider). Lets a deployment run a
+   *  real OpenAI-compatible LLM (e.g. Groq) with local/browser STT + TTS. */
+  sttProvider?: "local" | "openai";
+  llmProvider?: "local" | "openai";
+  ttsProvider?: "local" | "openai";
   providerApiKey?: string;
   providerBaseUrl?: string;
+  sttModel?: string;
+  llmModel?: string;
+  ttsModel?: string;
   maxConcurrentSessions: number;
   /** Port for the browser "Test Agent" WebSocket gateway. */
   wsPort: number;
@@ -35,8 +43,14 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     hmacSecret: process.env.INTERNAL_HMAC_SECRET ?? "dev-insecure-hmac-secret-change-me-0123456789",
     livekitUrl: process.env.LIVEKIT_URL ?? "",
     voiceProvider: process.env.VOICE_PROVIDER === "openai" ? "openai" : "local",
+    sttProvider: process.env.VOICE_STT_PROVIDER === "openai" ? "openai" : process.env.VOICE_STT_PROVIDER === "local" ? "local" : undefined,
+    llmProvider: process.env.VOICE_LLM_PROVIDER === "openai" ? "openai" : process.env.VOICE_LLM_PROVIDER === "local" ? "local" : undefined,
+    ttsProvider: process.env.VOICE_TTS_PROVIDER === "openai" ? "openai" : process.env.VOICE_TTS_PROVIDER === "local" ? "local" : undefined,
     providerApiKey: process.env.VOICE_PROVIDER_API_KEY,
     providerBaseUrl: process.env.VOICE_PROVIDER_BASE_URL,
+    sttModel: process.env.VOICE_STT_MODEL,
+    llmModel: process.env.VOICE_LLM_MODEL,
+    ttsModel: process.env.VOICE_TTS_MODEL,
     maxConcurrentSessions: Number(process.env.VOICE_WORKER_MAX_SESSIONS ?? 10),
     wsPort: Number(process.env.VOICE_WS_PORT ?? 8787),
     logLevel: process.env.LOG_LEVEL ?? "info",

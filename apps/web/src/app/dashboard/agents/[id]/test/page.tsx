@@ -9,11 +9,40 @@ import { createTestSession } from "@/lib/voice-test-api";
 import { describeError } from "@/lib/form";
 
 type Status = "idle" | "connecting" | "in_call" | "ended" | "error";
-type MicStatus = "off" | "granted" | "denied";
 interface Caption {
   role: "AGENT" | "CALLER";
   text: string;
   language?: string;
+}
+
+// Minimal typing for the browser's free Web Speech API (Chrome).
+interface SpeechRecognitionLike {
+  lang: string;
+  interimResults: boolean;
+  continuous: boolean;
+  onresult: ((event: { results: ArrayLike<ArrayLike<{ transcript: string }>> }) => void) | null;
+  onend: (() => void) | null;
+  onerror: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+type SpeechRecognitionCtor = new () => SpeechRecognitionLike;
+
+function bcp47(language: string): string {
+  return language === "uz" ? "uz-UZ" : language === "ru" ? "ru-RU" : "en-US";
+}
+
+/** Speak text aloud with the browser's free TTS (Web Speech API). */
+function speakText(text: string, language: string): void {
+  try {
+    const synth = typeof window !== "undefined" ? window.speechSynthesis : undefined;
+    if (!synth || !text) return;
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = bcp47(language);
+    synth.speak(utterance);
+  } catch {
+    /* speech synthesis unavailable */
+  }
 }
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -39,9 +68,16 @@ export default function TestAgentPage() {
   const [error, setError] = useState<string | null>(null);
   const [input, setInput] = useState("");
   const [language, setLanguage] = useState("uz");
-  const [micStatus, setMicStatus] = useState<MicStatus>("off");
+  const [speakResponses, setSpeakResponses] = useState(true);
+  const [listening, setListening] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const transcriptRef = useRef<HTMLDivElement | null>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const optsRef = useRef({ speak: true, language: "uz" });
+
+  useEffect(() => {
+    optsRef.current = { speak: speakResponses, language };
+  }, [speakResponses, language]);
 
   const closeWs = useCallback(() => {
     const ws = wsRef.current;
@@ -55,7 +91,18 @@ export default function TestAgentPage() {
     }
   }, []);
 
-  useEffect(() => () => closeWs(), [closeWs]);
+  useEffect(
+    () => () => {
+      closeWs();
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      if (typeof window !== "undefined") window.speechSynthesis?.cancel();
+    },
+    [closeWs],
+  );
 
   useEffect(() => {
     transcriptRef.current?.scrollTo({ top: transcriptRef.current.scrollHeight });
@@ -72,6 +119,9 @@ export default function TestAgentPage() {
         break;
       case "caption":
         setCaptions((prev) => [...prev, { role: message.role, text: message.text, language: message.language }]);
+        if (message.role === "AGENT" && optsRef.current.speak) {
+          speakText(message.text, message.language ?? optsRef.current.language);
+        }
         break;
       case "error":
         setError(message.message);
@@ -125,14 +175,41 @@ export default function TestAgentPage() {
     if (type === "hangup") closeWs();
   };
 
-  const enableMic = async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.getTracks().forEach((track) => track.stop());
-      setMicStatus("granted");
-    } catch {
-      setMicStatus("denied");
+  const toggleListening = () => {
+    if (listening) {
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        /* ignore */
+      }
+      setListening(false);
+      return;
     }
+    const w = window as unknown as {
+      SpeechRecognition?: SpeechRecognitionCtor;
+      webkitSpeechRecognition?: SpeechRecognitionCtor;
+    };
+    const Recognition = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!Recognition) {
+      setError("This browser has no speech recognition — use Chrome, or type below.");
+      return;
+    }
+    const recognition = new Recognition();
+    recognition.lang = bcp47(language);
+    recognition.interimResults = false;
+    recognition.continuous = false;
+    recognition.onresult = (event) => {
+      const text = event.results?.[0]?.[0]?.transcript?.trim();
+      const ws = wsRef.current;
+      if (text && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: "caller_text", text, language }));
+      }
+    };
+    recognition.onend = () => setListening(false);
+    recognition.onerror = () => setListening(false);
+    recognitionRef.current = recognition;
+    setListening(true);
+    recognition.start();
   };
 
   const connected = status === "in_call";
@@ -143,8 +220,9 @@ export default function TestAgentPage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Test agent</h1>
           <p className="text-sm text-muted-foreground">
-            A real voice session through the live pipeline (STT → LLM → TTS). Type-to-talk works
-            now; live microphone speech-to-text activates once a real STT provider is configured.
+            A real voice session with a live LLM. Speak (🎤 — free browser speech recognition) or
+            type; the agent answers and talks back aloud. Server-side STT/TTS providers plug in for
+            higher Uzbek quality (see docs/MULTILINGUAL_EVALUATION.md).
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -190,20 +268,24 @@ export default function TestAgentPage() {
                 {status === "connecting" ? "Connecting…" : "Start test call"}
               </Button>
             )}
-            <Button variant="outline" onClick={() => void enableMic()}>
-              {micStatus === "granted" ? "Microphone ready" : "Enable microphone"}
+            <Button variant="outline" onClick={toggleListening} disabled={!connected}>
+              {listening ? "Stop listening" : "🎤 Speak"}
             </Button>
+            <label className="flex items-center gap-2 text-sm text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={speakResponses}
+                onChange={(event) => setSpeakResponses(event.target.checked)}
+              />
+              Speak responses
+            </label>
           </div>
 
-          {micStatus === "granted" ? (
+          {listening ? (
             <Alert>
-              Microphone permission granted. Live speech-to-text turns on when a real STT provider
-              (e.g. Google Chirp — see <code>docs/MULTILINGUAL_EVALUATION.md</code>) is configured;
-              until then, use type-to-talk below to exercise the full pipeline.
+              Listening… speak now in {language.toUpperCase()}. (Free browser speech recognition —
+              best in Chrome; quality varies by language. You can also type below.)
             </Alert>
-          ) : null}
-          {micStatus === "denied" ? (
-            <Alert variant="destructive">Microphone permission was denied.</Alert>
           ) : null}
 
           <div

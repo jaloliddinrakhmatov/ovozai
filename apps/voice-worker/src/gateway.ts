@@ -46,6 +46,8 @@ export interface VoiceGatewayDeps {
   internal: VoiceInternalClient;
   providers: VoiceProviders;
   storage?: StorageProvider;
+  /** LLM model id passed to the session (e.g. a Groq model). */
+  llmModel?: string;
   maxSessions: number;
   logger?: (message: string) => void;
 }
@@ -108,6 +110,7 @@ async function runSession(
       internal: deps.internal,
       transport,
       storage: deps.storage,
+      llmModel: deps.llmModel,
       logger: deps.logger,
     });
     await session.run();

@@ -3,6 +3,9 @@ import { audioToText, textToAudio, type AudioChunk } from "@ovozai/integrations"
 export interface CallerTurn {
   audio: AsyncIterable<AudioChunk>;
   language?: string;
+  /** Pre-transcribed caller text (type-to-talk / browser speech recognition).
+   *  When set, the orchestrator uses it directly and skips server-side STT. */
+  text?: string;
 }
 
 export interface PlaybackResult {

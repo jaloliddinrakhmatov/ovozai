@@ -7,6 +7,7 @@ import {
   createInvitationRequestSchema,
   createOrganizationRequestSchema,
   invitationCreatedDtoSchema,
+  invitationDtoSchema,
   loginRequestSchema,
   meResponseSchema,
   membershipDtoSchema,
@@ -24,6 +25,7 @@ import {
   type CreateInvitationRequest,
   type CreateOrganizationRequest,
   type InvitationCreatedDto,
+  type InvitationDto,
   type LoginRequest,
   type MeResponse,
   type MembershipDto,
@@ -43,6 +45,7 @@ export interface PaginatedResult<T> {
 }
 
 const membershipListSchema = paginated(membershipWithUserDtoSchema);
+const invitationListSchema = paginated(invitationDtoSchema);
 const apiKeyListSchema = paginated(apiKeyDtoSchema);
 
 // --- Auth -----------------------------------------------------------------
@@ -128,6 +131,25 @@ export async function createInvitation(
   const body = createInvitationRequestSchema.parse(input);
   const data = await apiFetch(API_ROUTES.memberships.invites, { method: "POST", body });
   return invitationCreatedDtoSchema.parse(data);
+}
+
+/** `GET /memberships/invites` — list pending invitations (ADMIN+). */
+export async function listInvitations(params?: {
+  limit?: number;
+  cursor?: string;
+}): Promise<PaginatedResult<InvitationDto>> {
+  const search = new URLSearchParams();
+  if (params?.limit !== undefined) search.set("limit", String(params.limit));
+  if (params?.cursor) search.set("cursor", params.cursor);
+  const query = search.toString();
+  const path = query ? `${API_ROUTES.memberships.invites}?${query}` : API_ROUTES.memberships.invites;
+  const data = await apiFetch(path);
+  return invitationListSchema.parse(data);
+}
+
+/** `DELETE /memberships/invites/:id` — revoke a pending invitation (ADMIN+). */
+export async function revokeInvitation(id: string): Promise<void> {
+  await apiFetch(API_ROUTES.memberships.revokeInvite(id), { method: "DELETE" });
 }
 
 /** `POST /memberships/invites/:token/accept` — join the org (re-issues tokens). */

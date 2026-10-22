@@ -8,6 +8,7 @@ import {
   roleSatisfies,
   type InvitableRole,
   type InvitationCreatedDto,
+  type InvitationDto,
   type MembershipRole,
   type MembershipWithUserDto,
 } from "@ovozai/contracts";
@@ -23,8 +24,10 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import {
   createInvitation,
+  listInvitations,
   listMemberships,
   removeMembership,
+  revokeInvitation,
   updateMembershipRole,
   type PaginatedResult,
 } from "@/lib/auth-api";
@@ -232,10 +235,85 @@ function MemberRow({ membership, canManage, isOwner, isSelf, onChanged }: Member
   );
 }
 
+function PendingInvites({ refresh }: { refresh: number }) {
+  const [invites, setInvites] = useState<InvitationDto[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setError(null);
+    try {
+      const result = await listInvitations();
+      setInvites(result.data);
+    } catch (err) {
+      setError(describeError(err).message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, refresh]);
+
+  const onRevoke = async (id: string) => {
+    setBusyId(id);
+    try {
+      await revokeInvitation(id);
+      await load();
+    } catch (err) {
+      setError(describeError(err).message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Pending invitations</CardTitle>
+        <CardDescription>Invites that haven&apos;t been accepted yet.</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        {error ? <Alert variant="destructive">{error}</Alert> : null}
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading…</p>
+        ) : invites.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No pending invitations.</p>
+        ) : (
+          <ul className="flex flex-col gap-2">
+            {invites.map((invite) => (
+              <li
+                key={invite.id}
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border px-4 py-3"
+              >
+                <div className="flex flex-col">
+                  <span className="font-medium">{invite.email}</span>
+                  <span className="text-xs text-muted-foreground">Role: {invite.role}</span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={busyId === invite.id}
+                  onClick={() => void onRevoke(invite.id)}
+                >
+                  {busyId === invite.id ? "Revoking…" : "Revoke"}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function MembersPage() {
   const { user, activeRole } = useAuth();
   const canManage = activeRole ? roleSatisfies(activeRole, "ADMIN") : false;
   const isOwner = activeRole === "OWNER";
+  const [invitesRefresh, setInvitesRefresh] = useState(0);
 
   const [members, setMembers] = useState<MembershipWithUserDto[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -263,6 +341,7 @@ export default function MembersPage() {
 
   const reload = useCallback(() => {
     setLoading(true);
+    setInvitesRefresh((n) => n + 1);
     void load();
   }, [load]);
 
@@ -276,6 +355,8 @@ export default function MembersPage() {
       </div>
 
       {canManage ? <InviteForm onInvited={reload} /> : null}
+
+      {canManage ? <PendingInvites refresh={invitesRefresh} /> : null}
 
       <Card>
         <CardHeader>

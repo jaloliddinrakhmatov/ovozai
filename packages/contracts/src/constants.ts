@@ -54,6 +54,7 @@ export const API_ROUTES = {
     invites: `${API_BASE_PATH}/memberships/invites`,
     acceptInvite: (token: string): string =>
       `${API_BASE_PATH}/memberships/invites/${token}/accept`,
+    revokeInvite: (id: string): string => `${API_BASE_PATH}/memberships/invites/${id}`,
     byId: (id: string): string => `${API_BASE_PATH}/memberships/${id}`,
   },
   apiKeys: {

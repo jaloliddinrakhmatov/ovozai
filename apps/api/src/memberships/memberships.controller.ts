@@ -6,6 +6,7 @@ import {
   type AuthSession,
   type CreateInvitationRequest,
   type InvitationCreatedDto,
+  type InvitationDto,
   type MembershipDto,
   type PaginationQuery,
   type UpdateMembershipRoleRequest,
@@ -34,6 +35,14 @@ export class MembershipsController {
     return this.memberships.list(principal.organizationId as string, query);
   }
 
+  @Get("invites")
+  @Roles("ADMIN")
+  listInvites(
+    @Query(new ZodValidationPipe(paginationQuerySchema)) query: PaginationQuery,
+  ): Promise<{ data: InvitationDto[]; pageInfo: { nextCursor: string | null; hasNextPage: boolean } }> {
+    return this.memberships.listInvitations(query);
+  }
+
   @Post("invites")
   @Roles("ADMIN")
   invite(
@@ -57,6 +66,22 @@ export class MembershipsController {
     @Req() req: RequestWithContext,
   ): Promise<AuthSession> {
     return this.memberships.accept(principal, token, contextFrom(req));
+  }
+
+  @Delete("invites/:id")
+  @Roles("ADMIN")
+  @HttpCode(204)
+  revokeInvite(
+    @CurrentPrincipal() principal: UserPrincipal,
+    @Param("id") id: string,
+    @Req() req: RequestWithContext,
+  ): Promise<void> {
+    return this.memberships.revokeInvitation(
+      principal,
+      principal.organizationId as string,
+      id,
+      contextFrom(req),
+    );
   }
 
   @Patch(":id")

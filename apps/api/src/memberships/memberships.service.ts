@@ -4,6 +4,7 @@ import type {
   AuthSession,
   CreateInvitationRequest,
   InvitationCreatedDto,
+  InvitationDto,
   MembershipDto,
   MembershipWithUserDto,
   PaginationQuery,
@@ -20,6 +21,11 @@ import { randomToken, sha256Hex } from "../auth/crypto.util";
 
 interface MemberPage {
   data: MembershipWithUserDto[];
+  pageInfo: { nextCursor: string | null; hasNextPage: boolean };
+}
+
+interface InvitationPage {
+  data: InvitationDto[];
   pageInfo: { nextCursor: string | null; hasNextPage: boolean };
 }
 
@@ -52,6 +58,50 @@ export class MembershipsService {
         hasNextPage,
       },
     };
+  }
+
+  /** List the organization's pending (not-yet-accepted) invitations. */
+  async listInvitations(query: PaginationQuery): Promise<InvitationPage> {
+    const take = query.limit;
+    const rows = await this.prisma.tenant.invitation.findMany({
+      where: { status: "PENDING" },
+      orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+      take: take + 1,
+      ...(query.cursor ? { cursor: { id: query.cursor }, skip: 1 } : {}),
+    });
+    const hasNextPage = rows.length > take;
+    const page = hasNextPage ? rows.slice(0, take) : rows;
+    return {
+      data: page.map(toInvitationDto),
+      pageInfo: {
+        nextCursor: hasNextPage ? (page[page.length - 1]?.id ?? null) : null,
+        hasNextPage,
+      },
+    };
+  }
+
+  /** Revoke a pending invitation so its token can no longer be accepted. */
+  async revokeInvitation(
+    principal: UserPrincipal,
+    organizationId: string,
+    id: string,
+    ctx: RequestContext,
+  ): Promise<void> {
+    const result = await this.prisma.tenant.invitation.updateMany({
+      where: { id, status: "PENDING" },
+      data: { status: "REVOKED", revokedAt: new Date() },
+    });
+    if (result.count === 0) {
+      throw Problems.notFound("Invitation not found or already handled.");
+    }
+    await this.audit.record({
+      organizationId,
+      actorId: principal.userId,
+      action: "membership.invite.revoke",
+      targetType: "Invitation",
+      targetId: id,
+      ip: ctx.ip,
+    });
   }
 
   /** Invite a user by email with a role. Returns the one-time acceptance token. */

@@ -20,9 +20,18 @@ export interface VoiceProviderConfig {
   sttProvider?: Modality;
   llmProvider?: Modality;
   ttsProvider?: Modality;
-  /** Shared credentials for the OpenAI-compatible adapters (OpenAI, Groq, …). */
+  /** Shared credentials for the OpenAI-compatible adapters (OpenAI, Groq, …).
+   *  Used as the fallback when a per-modality key/URL is not given. */
   apiKey?: string;
   baseUrl?: string;
+  /** Per-modality credentials — so different modalities can use different
+   *  providers (e.g. Groq LLM + NeuronAI TTS), each with its own key + endpoint. */
+  sttApiKey?: string;
+  sttBaseUrl?: string;
+  llmApiKey?: string;
+  llmBaseUrl?: string;
+  ttsApiKey?: string;
+  ttsBaseUrl?: string;
   sttModel?: string;
   llmModel?: string;
   ttsModel?: string;
@@ -40,20 +49,27 @@ export function createVoiceProviders(config: VoiceProviderConfig = {}): VoicePro
   const llmKind = config.llmProvider ?? fallback;
   const ttsKind = config.ttsProvider ?? fallback;
 
-  const key = config.apiKey;
-  const requireKey = (kind: Modality, modality: string): void => {
-    if (kind === "openai" && !key) {
+  // Resolve each modality's credentials, falling back to the shared key/URL.
+  const cred = (modality: string, apiKey: string | undefined, baseUrl: string | undefined) => {
+    const resolvedKey = apiKey ?? config.apiKey;
+    if (!resolvedKey) {
       throw new Error(`Voice ${modality} provider 'openai' requires an API key`);
     }
+    return { apiKey: resolvedKey, baseUrl: baseUrl ?? config.baseUrl };
   };
-  requireKey(sttKind, "STT");
-  requireKey(llmKind, "LLM");
-  requireKey(ttsKind, "TTS");
-  const base = { apiKey: key ?? "", baseUrl: config.baseUrl };
 
   return {
-    stt: sttKind === "openai" ? new OpenAiSttProvider({ ...base, model: config.sttModel }) : new LocalSttProvider(),
-    llm: llmKind === "openai" ? new OpenAiLlmProvider({ ...base, model: config.llmModel }) : new LocalRuleLlmProvider(),
-    tts: ttsKind === "openai" ? new OpenAiTtsProvider({ ...base, model: config.ttsModel }) : new LocalTtsProvider(),
+    stt:
+      sttKind === "openai"
+        ? new OpenAiSttProvider({ ...cred("STT", config.sttApiKey, config.sttBaseUrl), model: config.sttModel })
+        : new LocalSttProvider(),
+    llm:
+      llmKind === "openai"
+        ? new OpenAiLlmProvider({ ...cred("LLM", config.llmApiKey, config.llmBaseUrl), model: config.llmModel })
+        : new LocalRuleLlmProvider(),
+    tts:
+      ttsKind === "openai"
+        ? new OpenAiTtsProvider({ ...cred("TTS", config.ttsApiKey, config.ttsBaseUrl), model: config.ttsModel })
+        : new LocalTtsProvider(),
   };
 }

@@ -21,6 +21,14 @@ export interface VoiceWorkerConfig {
   ttsProvider?: "local" | "openai";
   providerApiKey?: string;
   providerBaseUrl?: string;
+  /** Per-modality credentials (default to providerApiKey/providerBaseUrl), so a
+   *  separate TTS/STT provider (e.g. NeuronAI) can run alongside the LLM (Groq). */
+  sttApiKey?: string;
+  sttBaseUrl?: string;
+  llmApiKey?: string;
+  llmBaseUrl?: string;
+  ttsApiKey?: string;
+  ttsBaseUrl?: string;
   sttModel?: string;
   llmModel?: string;
   ttsModel?: string;
@@ -48,6 +56,12 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     ttsProvider: process.env.VOICE_TTS_PROVIDER === "openai" ? "openai" : process.env.VOICE_TTS_PROVIDER === "local" ? "local" : undefined,
     providerApiKey: process.env.VOICE_PROVIDER_API_KEY,
     providerBaseUrl: process.env.VOICE_PROVIDER_BASE_URL,
+    sttApiKey: process.env.VOICE_STT_API_KEY,
+    sttBaseUrl: process.env.VOICE_STT_BASE_URL,
+    llmApiKey: process.env.VOICE_LLM_API_KEY,
+    llmBaseUrl: process.env.VOICE_LLM_BASE_URL,
+    ttsApiKey: process.env.VOICE_TTS_API_KEY,
+    ttsBaseUrl: process.env.VOICE_TTS_BASE_URL,
     sttModel: process.env.VOICE_STT_MODEL,
     llmModel: process.env.VOICE_LLM_MODEL,
     ttsModel: process.env.VOICE_TTS_MODEL,

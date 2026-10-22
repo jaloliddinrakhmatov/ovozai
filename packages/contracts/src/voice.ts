@@ -114,10 +114,25 @@ export type KnowledgeRetrievalToolResponse = z.infer<typeof knowledgeRetrievalTo
 export const slotUnavailableReasonSchema = z.enum(["past", "out_of_hours", "conflict"]);
 export type SlotUnavailableReason = z.infer<typeof slotUnavailableReasonSchema>;
 
+/**
+ * A date-time emitted by the LLM when booking. Models are inconsistent — they
+ * send `2026-10-24T15:00`, `...:00`, a space instead of `T`, or a `+05:00`
+ * offset — so we accept all of these and let the server normalize a
+ * timezone-less value against the agent's booking timezone (strict UTC-only
+ * `z.iso.datetime()` rejected valid intents and crashed the call).
+ */
+export const flexibleDateTimeSchema = z
+  .string()
+  .trim()
+  .regex(
+    /^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?(\.\d+)?(Z|[+-]\d{2}:?\d{2})?$/,
+    "Expected a date-time like 2026-10-24T15:00 or 2026-10-24T15:00:00Z",
+  );
+
 export const bookAppointmentToolRequestSchema = z.object({
   title: z.string().min(1).max(200),
-  startsAt: z.iso.datetime(),
-  endsAt: z.iso.datetime().optional(),
+  startsAt: flexibleDateTimeSchema,
+  endsAt: flexibleDateTimeSchema.optional(),
   /** Appointment length; used to derive `endsAt` and to detect conflicts. */
   durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
   customerName: z.string().max(200).optional(),
@@ -147,7 +162,7 @@ export type BookAppointmentToolResponse = z.infer<typeof bookAppointmentToolResp
 
 /** `check_availability` tool — is a slot bookable, and if not, the nearest openings. */
 export const checkAvailabilityToolRequestSchema = z.object({
-  startsAt: z.iso.datetime(),
+  startsAt: flexibleDateTimeSchema,
   durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
 });
 export type CheckAvailabilityToolRequest = z.infer<typeof checkAvailabilityToolRequestSchema>;
@@ -164,8 +179,8 @@ export type CheckAvailabilityToolResponse = z.infer<typeof checkAvailabilityTool
 
 /** `reschedule_appointment` tool — move the caller's upcoming appointment. */
 export const rescheduleAppointmentToolRequestSchema = z.object({
-  newStartsAt: z.iso.datetime(),
-  newEndsAt: z.iso.datetime().optional(),
+  newStartsAt: flexibleDateTimeSchema,
+  newEndsAt: flexibleDateTimeSchema.optional(),
   durationMinutes: z.coerce.number().int().min(5).max(480).optional(),
   /** Which appointment to move; defaults to the caller's soonest upcoming one. */
   appointmentId: z.uuid().optional(),

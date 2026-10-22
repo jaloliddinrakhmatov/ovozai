@@ -274,6 +274,67 @@ export function formatWhen(date: Date, timezone: string, language: Language = "E
   }
 }
 
+/** The timezone's offset from UTC (ms) at a given instant. */
+function tzOffsetMs(date: Date, timezone: string): number {
+  const tz = isValidTimezone(timezone) ? timezone : "UTC";
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: tz,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => Number(parts.find((p) => p.type === type)?.value ?? "0");
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return asUtc - date.getTime();
+}
+
+/** The UTC instant whose wall-clock, in `timezone`, is the given local time. */
+function zonedWallClockToUtc(
+  y: number,
+  mo: number,
+  d: number,
+  h: number,
+  mi: number,
+  s: number,
+  timezone: string,
+): Date {
+  const guess = Date.UTC(y, mo - 1, d, h, mi, s);
+  // One correction step is exact for fixed-offset zones (e.g. Asia/Tashkent)
+  // and accurate elsewhere except at the DST boundary itself.
+  return new Date(guess - tzOffsetMs(new Date(guess), timezone));
+}
+
+/**
+ * Parse an LLM-supplied date-time string to an instant. A value with an explicit
+ * `Z`/offset is taken as-is; a timezone-less wall-clock value is interpreted in
+ * `timezone` (not the server's local zone). Returns an Invalid Date only when
+ * the string is unparseable.
+ */
+export function toInstant(raw: string, timezone: string): Date {
+  const s = raw.trim().replace(" ", "T");
+  if (/(Z|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const d = new Date(s);
+    if (!Number.isNaN(d.getTime())) return d;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
+  if (m) {
+    return zonedWallClockToUtc(
+      Number(m[1]),
+      Number(m[2]),
+      Number(m[3]),
+      Number(m[4]),
+      Number(m[5]),
+      m[6] ? Number(m[6]) : 0,
+      timezone,
+    );
+  }
+  return new Date(s);
+}
+
 /** Minutes between two instants (>= 0), or `fallback` when `end` is missing/invalid. */
 export function durationMinutesBetween(start: Date, end: Date | null | undefined, fallback: number): number {
   if (!end) return fallback;

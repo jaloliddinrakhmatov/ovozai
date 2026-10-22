@@ -5,6 +5,7 @@ import {
   durationMinutesBetween,
   formatWhen,
   parseBookingPolicy,
+  toInstant,
   type BookingPolicy,
   type ExistingAppointment,
 } from "./availability";
@@ -123,6 +124,22 @@ describe("helpers", () => {
     expect(durationMinutesBetween(new Date("2026-10-22T09:00:00Z"), new Date("2026-10-22T10:00:00Z"), 30)).toBe(60);
     expect(durationMinutesBetween(new Date("2026-10-22T09:00:00Z"), null, 30)).toBe(30);
     expect(durationMinutesBetween(new Date("2026-10-22T09:00:00Z"), new Date("2026-10-22T08:00:00Z"), 30)).toBe(30);
+  });
+
+  it("toInstant honors explicit UTC and offsets", () => {
+    expect(toInstant("2026-10-24T15:00:00Z", "Asia/Tashkent").toISOString()).toBe("2026-10-24T15:00:00.000Z");
+    expect(toInstant("2026-10-24T15:00:00+05:00", "Asia/Tashkent").toISOString()).toBe("2026-10-24T10:00:00.000Z");
+  });
+
+  it("toInstant interprets a timezone-less value in the agent timezone", () => {
+    // 15:00 local in Asia/Tashkent (UTC+5) == 10:00Z
+    expect(toInstant("2026-10-24T15:00", "Asia/Tashkent").toISOString()).toBe("2026-10-24T10:00:00.000Z");
+    expect(toInstant("2026-10-24T15:00:00", "Asia/Tashkent").toISOString()).toBe("2026-10-24T10:00:00.000Z");
+    expect(toInstant("2026-10-24 15:00", "Asia/Tashkent").toISOString()).toBe("2026-10-24T10:00:00.000Z");
+  });
+
+  it("toInstant returns an Invalid Date for unparseable input", () => {
+    expect(Number.isNaN(toInstant("tomorrow afternoon", "Asia/Tashkent").getTime())).toBe(true);
   });
 
   it("formatWhen renders a non-empty local string", () => {

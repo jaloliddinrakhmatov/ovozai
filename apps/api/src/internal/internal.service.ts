@@ -32,6 +32,7 @@ import {
   durationMinutesBetween,
   formatWhen,
   parseBookingPolicy,
+  toInstant,
   type BookingPolicy,
   type ExistingAppointment,
 } from "../appointments/availability";
@@ -340,8 +341,11 @@ export class InternalService {
     const organizationId = call.organizationId;
     const now = new Date();
     const policy = await this.loadBookingPolicy(call.agentId);
-    const start = new Date(dto.startsAt);
-    const explicitEnd = dto.endsAt ? new Date(dto.endsAt) : null;
+    const start = toInstant(dto.startsAt, policy.timezone);
+    if (Number.isNaN(start.getTime())) {
+      throw Problems.unprocessable("Could not understand the requested appointment time.");
+    }
+    const explicitEnd = dto.endsAt ? toInstant(dto.endsAt, policy.timezone) : null;
     const durationMin =
       dto.durationMinutes ?? durationMinutesBetween(start, explicitEnd, policy.slotMinutes);
 
@@ -441,7 +445,10 @@ export class InternalService {
     const call = await this.loadCall(callId);
     const now = new Date();
     const policy = await this.loadBookingPolicy(call.agentId);
-    const start = new Date(dto.startsAt);
+    const start = toInstant(dto.startsAt, policy.timezone);
+    if (Number.isNaN(start.getTime())) {
+      throw Problems.unprocessable("Could not understand the requested appointment time.");
+    }
     const durationMin = dto.durationMinutes ?? policy.slotMinutes;
     const existing = await this.loadActiveAppointments(call.organizationId);
     const check = checkSlotAvailability(start, durationMin, existing, policy, now);
@@ -468,8 +475,11 @@ export class InternalService {
     const target = await this.findTargetAppointment(call, dto.appointmentId);
     if (!target) return { rescheduled: false, reason: "not_found" };
 
-    const start = new Date(dto.newStartsAt);
-    const explicitEnd = dto.newEndsAt ? new Date(dto.newEndsAt) : null;
+    const start = toInstant(dto.newStartsAt, policy.timezone);
+    if (Number.isNaN(start.getTime())) {
+      throw Problems.unprocessable("Could not understand the requested appointment time.");
+    }
+    const explicitEnd = dto.newEndsAt ? toInstant(dto.newEndsAt, policy.timezone) : null;
     const durationMin =
       dto.durationMinutes ??
       durationMinutesBetween(

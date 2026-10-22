@@ -355,7 +355,26 @@ export class CallSession {
 
       if (toolName) {
         await this.event("tool.invoked", { name: toolName });
-        const outcome = await this.executeTool(toolName, safeJson(toolArgs));
+        let outcome: { text: string; end?: boolean; endStatus?: "COMPLETED" | "TRANSFERRED" };
+        try {
+          outcome = await this.executeTool(toolName, safeJson(toolArgs));
+        } catch (error) {
+          // A tool failure (bad args, upstream error) must never end the call —
+          // feed the model the failure so it recovers in words and keeps talking.
+          this.warn(`tool ${toolName} failed: ${error instanceof Error ? error.message : String(error)}`);
+          await this.event("tool.failed", {
+            name: toolName,
+            reason: error instanceof Error ? error.message : String(error),
+          });
+          this.messages.push({ role: "assistant", content: "" });
+          this.messages.push({
+            role: "tool",
+            content:
+              "That action could not be completed. Apologize briefly and ask the caller to restate the details, such as the exact date and time.",
+            toolCallId: toolId,
+          });
+          continue;
+        }
         if (outcome.end) {
           return {
             kind: "end",

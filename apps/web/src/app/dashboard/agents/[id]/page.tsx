@@ -40,6 +40,109 @@ import { AgentStatusBadge } from "@/components/agent-status-badge";
 const LANGUAGES: readonly Language[] = languageSchema.options;
 const STATUSES: readonly AgentStatus[] = agentStatusSchema.options;
 
+/** Weekly booking-hours editor (writes `config.booking`, read by the booking tools). */
+const DAY_ORDER = [
+  { key: "mon", label: "Monday" },
+  { key: "tue", label: "Tuesday" },
+  { key: "wed", label: "Wednesday" },
+  { key: "thu", label: "Thursday" },
+  { key: "fri", label: "Friday" },
+  { key: "sat", label: "Saturday" },
+  { key: "sun", label: "Sunday" },
+] as const;
+type DayKey = (typeof DAY_ORDER)[number]["key"];
+
+interface DayHours {
+  enabled: boolean;
+  open: string; // "HH:MM"
+  close: string; // "HH:MM"
+}
+
+interface BookingForm {
+  enforceHours: boolean;
+  timezone: string;
+  slotMinutes: string;
+  capacity: string;
+  days: Record<DayKey, DayHours>;
+}
+
+function defaultDays(enabled: boolean): Record<DayKey, DayHours> {
+  return Object.fromEntries(
+    DAY_ORDER.map((d) => [d.key, { enabled, open: "09:00", close: "18:00" }]),
+  ) as Record<DayKey, DayHours>;
+}
+
+function defaultBooking(): BookingForm {
+  return {
+    enforceHours: false,
+    timezone: "Asia/Tashkent",
+    slotMinutes: "30",
+    capacity: "1",
+    days: defaultDays(true),
+  };
+}
+
+/** Read `agent.config.booking` into the editor state, tolerating missing/partial config. */
+function bookingFromConfig(config: AgentDto["config"]): BookingForm {
+  const form = defaultBooking();
+  if (!config || typeof config !== "object") return form;
+  const booking = (config as Record<string, unknown>).booking;
+  if (!booking || typeof booking !== "object") return form;
+  const b = booking as Record<string, unknown>;
+  if (typeof b.timezone === "string" && b.timezone.trim()) form.timezone = b.timezone;
+  if (typeof b.slotMinutes === "number") form.slotMinutes = String(b.slotMinutes);
+  if (typeof b.capacity === "number") form.capacity = String(b.capacity);
+  if (b.hours && typeof b.hours === "object") {
+    form.enforceHours = true;
+    const hours = b.hours as Record<string, unknown>;
+    for (const { key } of DAY_ORDER) {
+      const windows = hours[key];
+      const first = Array.isArray(windows) && Array.isArray(windows[0]) ? (windows[0] as unknown[]) : null;
+      if (first && typeof first[0] === "string" && typeof first[1] === "string") {
+        form.days[key] = { enabled: true, open: first[0], close: first[1] };
+      } else {
+        form.days[key] = { ...form.days[key], enabled: false };
+      }
+    }
+  }
+  return form;
+}
+
+type BuildResult = { ok: true; value: Record<string, unknown> } | { ok: false; error: string };
+
+/** Serialize the editor state back into a `config.booking` object (or an error). */
+function buildBooking(form: BookingForm): BuildResult {
+  const slot = Number(form.slotMinutes);
+  if (!Number.isFinite(slot) || slot < 5 || slot > 480) {
+    return { ok: false, error: "Slot length must be between 5 and 480 minutes." };
+  }
+  const capacity = Number(form.capacity);
+  if (!Number.isFinite(capacity) || capacity < 1 || capacity > 1000) {
+    return { ok: false, error: "Capacity must be at least 1." };
+  }
+  const booking: Record<string, unknown> = {
+    timezone: form.timezone.trim() || "Asia/Tashkent",
+    slotMinutes: Math.floor(slot),
+    capacity: Math.floor(capacity),
+  };
+  if (form.enforceHours) {
+    const hours: Record<string, string[][]> = {};
+    for (const { key, label } of DAY_ORDER) {
+      const day = form.days[key];
+      if (!day.enabled) {
+        hours[key] = [];
+        continue;
+      }
+      if (!/^\d{2}:\d{2}$/.test(day.open) || !/^\d{2}:\d{2}$/.test(day.close) || day.open >= day.close) {
+        return { ok: false, error: `${label}: closing time must be after the opening time.` };
+      }
+      hours[key] = [[day.open, day.close]];
+    }
+    booking.hours = hours;
+  }
+  return { ok: true, value: booking };
+}
+
 /** Editable form state derived from an {@link AgentDto}. */
 interface AgentForm {
   name: string;
@@ -49,6 +152,7 @@ interface AgentForm {
   greeting: string;
   voiceId: string;
   transferNumber: string;
+  booking: BookingForm;
 }
 
 function toForm(agent: AgentDto): AgentForm {
@@ -60,6 +164,7 @@ function toForm(agent: AgentDto): AgentForm {
     greeting: agent.greeting ?? "",
     voiceId: agent.voiceId ?? "",
     transferNumber: agent.transferNumber ?? "",
+    booking: bookingFromConfig(agent.config),
   };
 }
 
@@ -122,12 +227,38 @@ export default function AgentDetailPage() {
     setForm((prev) => (prev ? { ...prev, ...patch } : prev));
   };
 
+  const updateBooking = (patch: Partial<BookingForm>) => {
+    setForm((prev) => (prev ? { ...prev, booking: { ...prev.booking, ...patch } } : prev));
+  };
+
+  const updateDay = (key: DayKey, patch: Partial<DayHours>) => {
+    setForm((prev) =>
+      prev
+        ? {
+            ...prev,
+            booking: {
+              ...prev.booking,
+              days: { ...prev.booking.days, [key]: { ...prev.booking.days[key], ...patch } },
+            },
+          }
+        : prev,
+    );
+  };
+
   const onSave = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form) return;
     setSaveError(null);
     setFieldErrors({});
     setSavedAt(null);
+
+    const booking = buildBooking(form.booking);
+    if (!booking.ok) {
+      setSaveError(booking.error);
+      return;
+    }
+    // Merge onto the existing config so other keys (e.g. consentAnnouncement) survive.
+    const mergedConfig = { ...((agent?.config as Record<string, unknown> | null) ?? {}), booking: booking.value };
 
     const parsed = updateAgentRequestSchema.safeParse({
       name: form.name,
@@ -137,6 +268,7 @@ export default function AgentDetailPage() {
       greeting: nullable(form.greeting),
       voiceId: nullable(form.voiceId),
       transferNumber: nullable(form.transferNumber),
+      config: mergedConfig,
     });
     if (!parsed.success) {
       setFieldErrors(zodFieldErrors(parsed.error));
@@ -310,6 +442,106 @@ export default function AgentDetailPage() {
                     placeholder="e.g. +998901234567"
                   />
                 </div>
+              </div>
+
+              <div className="flex flex-col gap-4 rounded-md border border-border p-4">
+                <div className="flex flex-col gap-1">
+                  <h3 className="text-sm font-semibold">Business hours &amp; booking</h3>
+                  <p className="text-xs text-muted-foreground">
+                    Controls the appointment tools: the agent won&apos;t book in the past, outside
+                    these hours, or past capacity (no double-booking), and offers the nearest open
+                    times instead.
+                  </p>
+                </div>
+
+                <div className="flex flex-col gap-4 sm:flex-row">
+                  <div className="flex-1">
+                    <FormField
+                      label="Timezone"
+                      name="timezone"
+                      value={form.booking.timezone}
+                      onChange={(e) => updateBooking({ timezone: e.target.value })}
+                      disabled={!canManage}
+                      placeholder="Asia/Tashkent"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      label="Slot length (min)"
+                      name="slotMinutes"
+                      type="number"
+                      min={5}
+                      max={480}
+                      value={form.booking.slotMinutes}
+                      onChange={(e) => updateBooking({ slotMinutes: e.target.value })}
+                      disabled={!canManage}
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <FormField
+                      label="Capacity (parallel appts)"
+                      name="capacity"
+                      type="number"
+                      min={1}
+                      value={form.booking.capacity}
+                      onChange={(e) => updateBooking({ capacity: e.target.value })}
+                      disabled={!canManage}
+                    />
+                  </div>
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4"
+                    checked={form.booking.enforceHours}
+                    onChange={(e) => updateBooking({ enforceHours: e.target.checked })}
+                    disabled={!canManage}
+                  />
+                  Enforce business hours <span className="text-muted-foreground">(off = always open)</span>
+                </label>
+
+                {form.booking.enforceHours ? (
+                  <div className="flex flex-col gap-2">
+                    {DAY_ORDER.map(({ key, label }) => {
+                      const day = form.booking.days[key];
+                      return (
+                        <div key={key} className="flex flex-wrap items-center gap-3">
+                          <label className="flex w-32 items-center gap-2 text-sm">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4"
+                              checked={day.enabled}
+                              onChange={(e) => updateDay(key, { enabled: e.target.checked })}
+                              disabled={!canManage}
+                            />
+                            {label}
+                          </label>
+                          <input
+                            type="time"
+                            aria-label={`${label} opening time`}
+                            className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={day.open}
+                            onChange={(e) => updateDay(key, { open: e.target.value })}
+                            disabled={!canManage || !day.enabled}
+                          />
+                          <span className="text-sm text-muted-foreground">–</span>
+                          <input
+                            type="time"
+                            aria-label={`${label} closing time`}
+                            className="h-9 rounded-md border border-input bg-background px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
+                            value={day.close}
+                            onChange={(e) => updateDay(key, { close: e.target.value })}
+                            disabled={!canManage || !day.enabled}
+                          />
+                          {!day.enabled ? (
+                            <span className="text-xs text-muted-foreground">closed</span>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
 
               {canManage ? (

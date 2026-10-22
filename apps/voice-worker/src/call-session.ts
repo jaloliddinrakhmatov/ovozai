@@ -320,7 +320,16 @@ export class CallSession {
       { voiceId: this.deps.agent.voiceId ?? "default", language: langToCode(this.deps.agent.defaultLanguage) },
       controller.signal,
     );
-    return this.deps.transport.playAgentAudio(audio, controller);
+    try {
+      return await this.deps.transport.playAgentAudio(audio, controller);
+    } catch (error) {
+      // A TTS failure (e.g. provider out of credits) must not end the call —
+      // fall back to client-side speech and keep the conversation going.
+      this.warn(`TTS failed, falling back to client speech: ${error instanceof Error ? error.message : String(error)}`);
+      await this.event("tts.failed", { reason: error instanceof Error ? error.message : String(error) });
+      this.deps.transport.speakTextFallback?.(text);
+      return { bargedIn: false };
+    }
   }
 
   private async reportTurn(

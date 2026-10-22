@@ -134,6 +134,10 @@ export class WebSocketTransport implements AudioTransport {
     return { bargedIn };
   }
 
+  speakTextFallback(text: string): void {
+    if (text.trim()) this.send({ type: "agent_audio_text", text });
+  }
+
   async close(): Promise<void> {
     this.send({ type: "state", state: "ended" });
     try {

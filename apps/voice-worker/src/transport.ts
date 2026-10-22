@@ -26,6 +26,8 @@ export interface AudioTransport {
    * aborts `controller` and resolves with `bargedIn: true`, stopping synthesis.
    */
   playAgentAudio(audio: AsyncIterable<AudioChunk>, controller: AbortController): Promise<PlaybackResult>;
+  /** Fallback when synthesis fails: ask the client to speak the text itself. */
+  speakTextFallback?(text: string): void;
   close(): Promise<void>;
 }
 

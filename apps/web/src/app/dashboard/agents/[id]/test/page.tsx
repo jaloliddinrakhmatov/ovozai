@@ -180,13 +180,15 @@ export default function TestAgentPage() {
           break;
         case "caption":
           setCaptions((prev) => [...prev, { role: message.role, text: message.text, language: message.language }]);
-          // Speak with the browser only when the server is NOT sending real audio.
-          if (message.role === "AGENT" && !serverAudioRef.current && optsRef.current.speak) {
-            speakText(message.text, message.language ?? optsRef.current.language);
-          }
           break;
         case "agent_audio":
           enqueueAudio(message.mime, message.dataBase64);
+          break;
+        case "agent_audio_text":
+          // Browser-spoken: the dev-bridge path, or a fallback when server TTS fails.
+          if (serverAudioRef.current || optsRef.current.speak) {
+            speakText(message.text, optsRef.current.language);
+          }
           break;
         case "error":
           setError(message.message);

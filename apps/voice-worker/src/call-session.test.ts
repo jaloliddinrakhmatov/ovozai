@@ -17,7 +17,7 @@ import type {
   UsageReport,
   VoiceAgentConfig,
 } from "@ovozai/contracts";
-import { CallSession } from "./call-session";
+import { CallSession, detectLanguage } from "./call-session";
 import { SimulatedTransport } from "./transport";
 import type { VoiceInternalClient } from "./internal-client";
 
@@ -116,6 +116,24 @@ const AGENT: VoiceAgentConfig = {
   transferNumber: null,
   config: null,
 };
+
+describe("detectLanguage", () => {
+  it("detects Russian from Cyrillic", () => {
+    expect(detectLanguage("Здравствуйте, когда вы работаете?")).toBe("RU");
+  });
+  it("detects Uzbek from markers and orthography", () => {
+    expect(detectLanguage("Ish vaqtingiz qanday?")).toBe("UZ");
+    expect(detectLanguage("Soat 10:00 ga yozmoqchiman")).toBe("UZ");
+  });
+  it("detects English", () => {
+    expect(detectLanguage("What are your opening hours?")).toBe("EN");
+    expect(detectLanguage("I want to book an appointment")).toBe("EN");
+  });
+  it("returns undefined for short ambiguous input", () => {
+    expect(detectLanguage("15:00")).toBeUndefined();
+    expect(detectLanguage("ok")).toBeUndefined();
+  });
+});
 
 describe("CallSession (simulated call through the real local pipeline)", () => {
   it("runs STT→LLM→TTS, tools, barge-in, and reports to the internal channel", async () => {

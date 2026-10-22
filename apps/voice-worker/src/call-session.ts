@@ -203,6 +203,42 @@ function codeToLang(code: string | undefined): Language | undefined {
   }
 }
 
+const UZ_WORDS = new Set([
+  "men", "sen", "siz", "biz", "soat", "kun", "bugun", "ertaga", "ha", "yoq", "bor", "yoziling",
+  "qancha", "qanday", "nechi", "necha", "rahmat", "salom", "assalomu", "alaykum", "iltimos",
+  "kerak", "band", "yozmoqchiman", "shifokor", "narx", "manzil", "ish", "vaqti", "qabul",
+  "uchrashuv", "mumkinmi", "bormi", "yozing", "kechirasiz",
+]);
+const EN_WORDS = new Set([
+  "the", "you", "what", "is", "are", "hello", "hi", "thanks", "thank", "yes", "no", "time",
+  "hours", "open", "book", "appointment", "want", "need", "please", "doctor", "price", "address",
+  "can", "how", "much", "today", "tomorrow", "schedule", "available",
+]);
+
+/**
+ * Best-effort language detection from a caller's text, so the agent follows a
+ * caller who switches languages mid-call. Cyrillic → Russian; otherwise weigh
+ * Uzbek vs English markers (including Uzbek orthography like oʻ/gʻ). Returns
+ * undefined when there's no clear signal, so the caller's selected/STT language
+ * stays authoritative for short, ambiguous inputs.
+ */
+export function detectLanguage(text: string): Language | undefined {
+  const lower = text.toLowerCase();
+  if (/[Ѐ-ӿ]/.test(lower)) return "RU";
+  const words = lower.match(/[\p{L}']+/gu) ?? [];
+  if (words.length === 0) return undefined;
+  let uz = 0;
+  let en = 0;
+  for (const word of words) {
+    if (UZ_WORDS.has(word)) uz += 1;
+    if (EN_WORDS.has(word)) en += 1;
+  }
+  if (/oʻ|gʻ|o'|g'|ʻ/.test(lower)) uz += 1;
+  if (uz > en) return "UZ";
+  if (en > uz) return "EN";
+  return undefined;
+}
+
 /** A short spoken line for an unbookable slot, offering any alternatives. */
 function unavailableText(
   reason: "past" | "out_of_hours" | "conflict" | undefined,
@@ -254,8 +290,11 @@ export class CallSession {
   private endStatus: "COMPLETED" | "TRANSFERRED" | "FAILED" = "COMPLETED";
   private recordingConsent = false;
   private readonly transcriptLog: string[] = [];
+  /** The caller's language right now — tracks mid-call switches, drives TTS. */
+  private currentLanguage: Language;
 
   constructor(private readonly deps: CallSessionDeps) {
+    this.currentLanguage = deps.agent.defaultLanguage;
     const tz = bookingTimezone(deps.agent.config);
     // Qwen3 is a reasoning model; without this it spends the token budget on a
     // <think> block and often returns no answer. "/no_think" makes it reply
@@ -306,12 +345,16 @@ export class CallSession {
           ? { text: turn.text.trim(), language: codeToLang(turn.language) }
           : await this.transcribe(turn.audio, turn.language);
       if (!text) continue;
-      await this.reportTurn("CALLER", text, baseMs, language ?? agent.defaultLanguage);
+      // Follow the caller if they switch language mid-call: detection from the
+      // text wins when confident, else the selected/STT language, else default.
+      const turnLanguage = detectLanguage(text) ?? language ?? agent.defaultLanguage;
+      this.currentLanguage = turnLanguage;
+      await this.reportTurn("CALLER", text, baseMs, turnLanguage);
       this.messages.push({ role: "user", content: text });
 
       this.state = "thinking";
       const result = await this.think();
-      await this.reportTurn("AGENT", result.text, baseMs + 1000, agent.defaultLanguage);
+      await this.reportTurn("AGENT", result.text, baseMs + 1000, this.currentLanguage);
       this.messages.push({ role: "assistant", content: result.text });
 
       this.state = "speaking";
@@ -530,7 +573,7 @@ export class CallSession {
     const controller = new AbortController();
     const audio = this.deps.providers.tts.synthesize(
       text,
-      { voiceId: this.deps.agent.voiceId ?? "default", language: langToCode(this.deps.agent.defaultLanguage) },
+      { voiceId: this.deps.agent.voiceId ?? "default", language: langToCode(this.currentLanguage) },
       controller.signal,
     );
     try {

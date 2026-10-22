@@ -130,7 +130,12 @@ const STYLE_DIRECTIVE = [
   "Reply in the caller's language.",
   "Keep every reply to one or two short sentences — never read long lists or paragraphs aloud.",
   "Ask only one question at a time.",
-  "When booking, confirm the exact date and time; if a time is unavailable, offer the alternatives you are given.",
+  "For anything about appointments you MUST use the tools: check_availability to look up a time,",
+  "book_appointment to book, reschedule_appointment to move an existing one, cancel_appointment to cancel.",
+  "Never tell the caller an appointment is booked, moved, or cancelled unless the matching tool has just",
+  "confirmed it in this same turn — never invent a confirmation.",
+  "Always pass the exact date and time to the tool as a concrete value.",
+  "When a time is unavailable, offer the alternatives the tool gives you.",
 ].join(" ");
 
 /** The booking timezone from the agent config, or the UZ default. */
@@ -239,9 +244,13 @@ export class CallSession {
 
   constructor(private readonly deps: CallSessionDeps) {
     const tz = bookingTimezone(deps.agent.config);
+    // Qwen3 is a reasoning model; without this it spends the token budget on a
+    // <think> block and often returns no answer. "/no_think" makes it reply
+    // directly — far more reliable for short receptionist turns + tool calls.
+    const noThink = (deps.llmModel ?? "").toLowerCase().includes("qwen") ? " /no_think" : "";
     this.messages.push({
       role: "system",
-      content: `${deps.agent.systemPrompt}\n\n${STYLE_DIRECTIVE}\n\n${nowContext(tz)}`,
+      content: `${deps.agent.systemPrompt}\n\n${STYLE_DIRECTIVE}\n\n${nowContext(tz)}${noThink}`,
     });
   }
 
@@ -338,9 +347,9 @@ export class CallSession {
         messages: this.messages,
         tools: TOOL_SCHEMAS,
         temperature: 0.3,
-        // Short, receptionist-style turns (see STYLE_DIRECTIVE) — also keeps
-        // per-turn TTS cost low.
-        maxTokens: 160,
+        // Headroom so reasoning models can finish a turn (160 truncated them to
+        // an empty reply); the spoken output stays short via STYLE_DIRECTIVE.
+        maxTokens: 512,
       })) {
         if (chunk.textDelta) {
           text += chunk.textDelta;
@@ -389,8 +398,12 @@ export class CallSession {
       }
 
       // Strip reasoning blocks some models (e.g. Qwen) emit before the answer,
-      // so the agent never speaks its chain-of-thought.
-      const spoken = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+      // so the agent never speaks its chain-of-thought — including a truncated
+      // block with no closing tag.
+      const spoken = text
+        .replace(/<think>[\s\S]*?<\/think>/gi, "")
+        .replace(/<think>[\s\S]*$/i, "")
+        .trim();
       return { kind: "speak", text: spoken || "I'm sorry, could you repeat that?" };
     }
     return { kind: "speak", text: "Let me connect you to a colleague." };

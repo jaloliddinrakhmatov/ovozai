@@ -86,7 +86,13 @@ async function runDevCall(agentId: string, mode: string): Promise<void> {
 async function main(): Promise<void> {
   console.info("────────────────────────────────────────────────────────");
   console.info(" OvozAI voice-worker started");
-  console.info(" providers: %s | api: %s", config.voiceProvider, config.apiBaseUrl);
+  console.info(
+    " providers: stt=%s llm=%s tts=%s | api: %s",
+    config.sttProvider ?? config.voiceProvider,
+    config.llmProvider ?? config.voiceProvider,
+    config.ttsProvider ?? config.voiceProvider,
+    config.apiBaseUrl,
+  );
   console.info("────────────────────────────────────────────────────────");
 
   const devAgentId = process.env.VOICE_DEV_CALL_AGENT_ID;

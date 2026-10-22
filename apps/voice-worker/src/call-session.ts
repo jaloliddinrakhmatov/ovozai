@@ -133,6 +133,41 @@ const STYLE_DIRECTIVE = [
   "When booking, confirm the exact date and time; if a time is unavailable, offer the alternatives you are given.",
 ].join(" ");
 
+/** The booking timezone from the agent config, or the UZ default. */
+function bookingTimezone(config: VoiceAgentConfig["config"]): string {
+  if (config && typeof config === "object") {
+    const booking = (config as Record<string, unknown>).booking;
+    if (booking && typeof booking === "object") {
+      const tz = (booking as Record<string, unknown>).timezone;
+      if (typeof tz === "string" && tz.trim()) return tz;
+    }
+  }
+  return "Asia/Tashkent";
+}
+
+/**
+ * A line appended to the system prompt so the model can resolve relative times
+ * ("tomorrow", "this Friday") into concrete ISO timestamps when booking.
+ */
+function nowContext(tz: string): string {
+  let when: string;
+  try {
+    when = new Intl.DateTimeFormat("en-GB", {
+      timeZone: tz,
+      weekday: "long",
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+    }).format(new Date());
+  } catch {
+    when = new Date().toISOString();
+  }
+  return `Current date and time: ${when} (timezone ${tz}). Resolve relative times like "today", "tomorrow", or "this Friday" against this, and always pass appointment times as full ISO 8601 timestamps.`;
+}
+
 function langToCode(language: Language): "uz" | "ru" | "en" {
   return language === "UZ" ? "uz" : language === "RU" ? "ru" : "en";
 }
@@ -203,9 +238,10 @@ export class CallSession {
   private readonly transcriptLog: string[] = [];
 
   constructor(private readonly deps: CallSessionDeps) {
+    const tz = bookingTimezone(deps.agent.config);
     this.messages.push({
       role: "system",
-      content: `${deps.agent.systemPrompt}\n\n${STYLE_DIRECTIVE}`,
+      content: `${deps.agent.systemPrompt}\n\n${STYLE_DIRECTIVE}\n\n${nowContext(tz)}`,
     });
   }
 

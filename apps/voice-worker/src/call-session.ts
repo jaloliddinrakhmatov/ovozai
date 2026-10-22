@@ -136,7 +136,18 @@ const STYLE_DIRECTIVE = [
   "confirmed it in this same turn — never invent a confirmation.",
   "Always pass the exact date and time to the tool as a concrete value.",
   "When a time is unavailable, offer the alternatives the tool gives you.",
+  "For questions about the business (hours, location, prices, services, policies), call",
+  "knowledge_retrieval and answer ONLY from what it returns — never guess facts.",
+  "If it returns nothing relevant, say you don't have that information and offer to take a",
+  "message or connect a colleague.",
 ].join(" ");
+
+/**
+ * Minimum cosine score for a retrieved chunk to be treated as relevant. Below
+ * this the agent says it doesn't know rather than answering from a weak match.
+ * Tuned for the local lexical embedder; a result without a score is kept.
+ */
+const KNOWLEDGE_MIN_SCORE = 0.12;
 
 /** The booking timezone from the agent config, or the UZ default. */
 function bookingTimezone(config: VoiceAgentConfig["config"]): string {
@@ -418,10 +429,17 @@ export class CallSession {
       case "knowledge_retrieval": {
         const response = await internal.knowledgeRetrieval(callId, {
           query: typeof args.query === "string" ? args.query : "",
-          topK: 3,
+          topK: 4,
         });
-        const top = response.results[0];
-        return { text: top ? top.content : "I don't have information about that just yet." };
+        // Keep only chunks that are actually relevant, then give the model the
+        // top few as grounding (not just the single best chunk).
+        const relevant = response.results
+          .filter((r) => (r.score ?? 1) >= KNOWLEDGE_MIN_SCORE)
+          .slice(0, 3);
+        if (relevant.length === 0) {
+          return { text: "I don't have information about that just yet." };
+        }
+        return { text: relevant.map((r) => r.content).join("\n\n") };
       }
       case "check_availability": {
         const response = await internal.checkAvailability(callId, {

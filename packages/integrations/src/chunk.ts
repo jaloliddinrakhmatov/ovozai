@@ -10,6 +10,12 @@ export interface ChunkOptions {
   maxChars?: number;
   /** Overlap (characters) when hard-splitting an oversized paragraph. */
   overlapChars?: number;
+  /**
+   * FAQ mode: keep each paragraph as its own chunk instead of packing several
+   * together. Focused, single-topic chunks retrieve far better for Q&A content
+   * (a question matches its own answer, not a wall of unrelated items).
+   */
+  splitParagraphs?: boolean;
 }
 
 /** Rough token estimate (~4 chars/token) — good enough for metering/ordering. */
@@ -46,19 +52,25 @@ export function chunkText(text: string, options: ChunkOptions = {}): TextChunk[]
     }
   }
 
+  // FAQ mode keeps each paragraph separate; otherwise greedily pack paragraphs
+  // up to maxChars.
   const merged: string[] = [];
-  let current = "";
-  for (const piece of pieces) {
-    if (!current) {
-      current = piece;
-    } else if (current.length + 2 + piece.length <= maxChars) {
-      current = `${current}\n\n${piece}`;
-    } else {
-      merged.push(current);
-      current = piece;
+  if (options.splitParagraphs) {
+    merged.push(...pieces);
+  } else {
+    let current = "";
+    for (const piece of pieces) {
+      if (!current) {
+        current = piece;
+      } else if (current.length + 2 + piece.length <= maxChars) {
+        current = `${current}\n\n${piece}`;
+      } else {
+        merged.push(current);
+        current = piece;
+      }
     }
+    if (current) merged.push(current);
   }
-  if (current) merged.push(current);
 
   return merged.map((content, ordinal) => ({ ordinal, content, tokenCount: estimateTokens(content) }));
 }

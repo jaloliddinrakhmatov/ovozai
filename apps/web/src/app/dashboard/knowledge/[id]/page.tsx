@@ -129,6 +129,11 @@ function AddDocumentForm({
                 </option>
               ))}
             </SelectField>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              Choose <strong>FAQ</strong> for Q&amp;A or lists (hours, address, prices, services) —
+              separate each item with a blank line and each is indexed on its own for sharper
+              answers. Use <strong>TEXT</strong> for longer prose.
+            </p>
           </div>
           <TextareaField
             label="Content"

@@ -39,7 +39,8 @@ export async function processEmbeddingJob(
     data: { status: "PROCESSING", error: null },
   });
 
-  const chunks = chunkText(document.content ?? "");
+  // FAQ documents are indexed one item per chunk for sharper retrieval.
+  const chunks = chunkText(document.content ?? "", { splitParagraphs: document.sourceType === "FAQ" });
   const vectors = chunks.length > 0 ? await embedder.embed(chunks.map((c) => c.content)) : [];
 
   // Replace any prior chunks so re-runs are idempotent.

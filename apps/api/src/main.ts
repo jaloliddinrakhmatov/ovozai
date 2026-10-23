@@ -56,7 +56,9 @@ async function bootstrap(): Promise<void> {
   });
   app.enableShutdownHooks();
 
-  const port = Number(config.get("API_PORT") ?? 3001);
+  // PaaS hosts (Render, Railway, …) inject the bind port as PORT; fall back to
+  // the explicit API_PORT, then the local default.
+  const port = Number(process.env.PORT ?? config.get("API_PORT") ?? 3001);
   const host = config.get<string>("API_HOST") ?? "0.0.0.0";
   await app.listen(port, host);
 

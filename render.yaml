@@ -1,0 +1,88 @@
+# Render Blueprint — OvozAI backend (api + voice-worker).
+# The web app deploys separately to Vercel; PostgreSQL is Neon (external, free).
+# Redis + jobs-worker are intentionally omitted for the free demo (the knowledge
+# base is pre-seeded, so the voice agent, booking and dashboard all work).
+#
+# Secrets are NEVER committed — set the `sync: false` vars in the Render dashboard:
+#   ovozai-api:   DATABASE_URL, CORS_ORIGINS, APP_WEB_URL, VOICE_WS_PUBLIC_URL
+#   ovozai-voice: VOICE_API_URL, VOICE_STT_API_KEY, VOICE_LLM_API_KEY, VOICE_TTS_API_KEY
+# INTERNAL_SERVICE_TOKEN / INTERNAL_HMAC_SECRET are generated on the api and shared
+# to the voice-worker via `fromService`, so the HMAC on the internal channel matches.
+services:
+  - type: web
+    name: ovozai-api
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm exec turbo run build --filter=@ovozai/api
+    startCommand: node apps/api/dist/main.js
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: INTERNAL_SERVICE_TOKEN
+        generateValue: true
+      - key: INTERNAL_HMAC_SECRET
+        generateValue: true
+      - key: CORS_ORIGINS
+        sync: false
+      - key: APP_WEB_URL
+        sync: false
+      - key: VOICE_WS_PUBLIC_URL
+        sync: false
+      - key: EMBEDDING_PROVIDER
+        value: local
+      - key: LOG_FORMAT
+        value: json
+      - key: METRICS_ENABLED
+        value: "true"
+
+  - type: web
+    name: ovozai-voice
+    runtime: node
+    plan: free
+    rootDir: .
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm exec turbo run build --filter=@ovozai/voice-worker
+    startCommand: node apps/voice-worker/dist/main.js
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: VOICE_API_URL
+        sync: false
+      - key: INTERNAL_SERVICE_TOKEN
+        fromService:
+          type: web
+          name: ovozai-api
+          envVarKey: INTERNAL_SERVICE_TOKEN
+      - key: INTERNAL_HMAC_SECRET
+        fromService:
+          type: web
+          name: ovozai-api
+          envVarKey: INTERNAL_HMAC_SECRET
+      - key: VOICE_STT_PROVIDER
+        value: neuronai
+      - key: VOICE_STT_BASE_URL
+        value: https://my.neuronai.uz/api/v1
+      - key: VOICE_STT_API_KEY
+        sync: false
+      - key: VOICE_LLM_PROVIDER
+        value: openai
+      - key: VOICE_LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: VOICE_LLM_MODEL
+        value: qwen/qwen3.8-27b
+      - key: VOICE_LLM_API_KEY
+        sync: false
+      - key: VOICE_TTS_PROVIDER
+        value: neuronai
+      - key: VOICE_TTS_MODEL
+        value: kamron
+      - key: VOICE_TTS_API_KEY
+        sync: false
+      # Cost guard for a public demo: cap concurrent voice sessions.
+      - key: VOICE_WORKER_MAX_SESSIONS
+        value: "3"

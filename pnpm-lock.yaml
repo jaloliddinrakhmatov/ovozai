@@ -663,6 +663,9 @@ importers:
       '@ovozai/config':
         specifier: workspace:*
         version: link:../config
+      '@ovozai/integrations':
+        specifier: workspace:*
+        version: link:../integrations
       '@prisma/adapter-pg':
         specifier: 'catalog:'
         version: 7.10.1

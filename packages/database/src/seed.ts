@@ -1,5 +1,6 @@
 import { config as loadEnv } from "dotenv";
 import { PrismaPg } from "@prisma/adapter-pg";
+import { createEmbeddingProvider } from "@ovozai/integrations";
 import { PrismaClient } from "./generated/client";
 
 // Load DATABASE_URL (Prisma 7 does not auto-load .env).
@@ -23,6 +24,19 @@ const DEMO_PASSWORD = "ovozai-demo";
 const DEMO_PASSWORD_HASH =
   "$argon2id$v=19$m=65536,p=4,t=3$xLACd5uCr01L8mZ6KLw9SA$gUj2hS+M8jxIwS9oZ/SZiGe+jgNdgYZHfg8yGAWQQzc";
 const DEMO_AGENT_ID = "d0000000-0000-4000-8000-000000000001";
+const KB_ID = "d0000000-0000-4000-8000-000000000002";
+const DOC_ID = "d0000000-0000-4000-8000-000000000003";
+
+// Each FAQ item becomes one chunk. The local embedder is lexical (keyword-based),
+// so each item is written to contain the words a caller would actually use.
+const FAQ_ITEMS = [
+  "Ish vaqti: Luxe go'zallik saloni har kuni soat 10:00 dan 20:00 gacha ishlaydi. Dushanba — dam olish kuni.",
+  "Manzil: salon Toshkent shahri, Amir Temur ko'chasi 15-uyda joylashgan.",
+  "Narxlar: soch oldirish 80 000 so'm, soch bo'yash 250 000 so'mdan boshlab, manikyur 120 000 so'm, pedikyur 150 000 so'm, qosh va kiprik 90 000 so'm, make-up pardoz 200 000 so'm.",
+  "To'lov: naqd pul yoki plastik karta orqali to'lash mumkin.",
+  "Yozilish (bandlik): oldindan telefon orqali yoki administrator bilan band qilish mumkin; so'ralgan vaqt band bo'lsa, eng yaqin bo'sh vaqt taklif qilinadi.",
+  "Qulayliklar: salonda mijozlar uchun bepul Wi-Fi, choy va qahva mavjud.",
+];
 
 const BUSINESS_HOURS: Record<string, string[][]> = {
   mon: [], // dushanba — dam olish kuni (closed)
@@ -153,8 +167,54 @@ async function main(): Promise<void> {
       create: { agentId: agent.id, organizationId: organization.id, version: 1, config: AGENT_CONFIG },
     });
 
+    // Knowledge base (FAQ), pre-embedded with the local lexical embedder so the
+    // agent's knowledge_retrieval works without the jobs-worker. The embedding
+    // model MUST match the API's (EMBEDDING_PROVIDER=local, dimensions 256).
+    const embedder = createEmbeddingProvider({ provider: "local", dimensions: 256 });
+    const kb = await prisma.knowledgeBase.upsert({
+      where: { id: KB_ID },
+      update: { name: "Salon ma'lumotlari", agentId: agent.id, status: "ACTIVE" },
+      create: {
+        id: KB_ID,
+        organizationId: organization.id,
+        agentId: agent.id,
+        name: "Salon ma'lumotlari",
+        status: "ACTIVE",
+      },
+    });
+    const docContent = FAQ_ITEMS.join("\n\n");
+    await prisma.knowledgeDocument.upsert({
+      where: { id: DOC_ID },
+      update: { title: "Tez-tez so'raladigan savollar", status: "READY", content: docContent },
+      create: {
+        id: DOC_ID,
+        knowledgeBaseId: kb.id,
+        organizationId: organization.id,
+        title: "Tez-tez so'raladigan savollar",
+        sourceType: "FAQ",
+        content: docContent,
+        status: "READY",
+        bytes: Buffer.byteLength(docContent, "utf8"),
+      },
+    });
+    const vectors = await embedder.embed(FAQ_ITEMS);
+    await prisma.knowledgeChunk.deleteMany({ where: { documentId: DOC_ID } });
+    await prisma.knowledgeChunk.createMany({
+      data: FAQ_ITEMS.map((content, i) => ({
+        documentId: DOC_ID,
+        knowledgeBaseId: kb.id,
+        organizationId: organization.id,
+        ordinal: i,
+        content,
+        tokenCount: Math.max(1, Math.round(content.length / 4)),
+        embedding: vectors[i]!,
+        embeddingModel: embedder.model,
+      })),
+    });
+
     console.log(`Seeded organization "${organization.slug}" with owner ${user.email}`);
     console.log(`Seeded ACTIVE agent "${agent.name}" (${agent.id})`);
+    console.log(`Seeded knowledge base "${kb.name}" with ${FAQ_ITEMS.length} chunks (${embedder.model})`);
     console.log(`\nDemo login →  ${DEMO_EMAIL}  /  ${DEMO_PASSWORD}`);
   } finally {
     await prisma.$disconnect();

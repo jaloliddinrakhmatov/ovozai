@@ -32,6 +32,7 @@
   },
   "devDependencies": {
     "@ovozai/config": "workspace:*",
+    "@ovozai/integrations": "workspace:*",
     "@prisma/adapter-pg": "catalog:",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",

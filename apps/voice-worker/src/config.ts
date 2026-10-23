@@ -21,7 +21,7 @@ export interface VoiceWorkerConfig {
   voiceProvider: "local" | "openai";
   /** Per-modality overrides (default to voiceProvider). Lets a deployment run a
    *  real OpenAI-compatible LLM (e.g. Groq) with local/browser STT + TTS. */
-  sttProvider?: "local" | "openai";
+  sttProvider?: "local" | "openai" | "neuronai";
   llmProvider?: "local" | "openai";
   ttsProvider?: "local" | "openai" | "neuronai";
   providerApiKey?: string;
@@ -60,7 +60,14 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     livekitDevRoom: process.env.LIVEKIT_DEV_ROOM,
     livekitDevAgentId: process.env.LIVEKIT_DEV_AGENT_ID,
     voiceProvider: process.env.VOICE_PROVIDER === "openai" ? "openai" : "local",
-    sttProvider: process.env.VOICE_STT_PROVIDER === "openai" ? "openai" : process.env.VOICE_STT_PROVIDER === "local" ? "local" : undefined,
+    sttProvider:
+      process.env.VOICE_STT_PROVIDER === "neuronai"
+        ? "neuronai"
+        : process.env.VOICE_STT_PROVIDER === "openai"
+          ? "openai"
+          : process.env.VOICE_STT_PROVIDER === "local"
+            ? "local"
+            : undefined,
     llmProvider: process.env.VOICE_LLM_PROVIDER === "openai" ? "openai" : process.env.VOICE_LLM_PROVIDER === "local" ? "local" : undefined,
     ttsProvider:
       process.env.VOICE_TTS_PROVIDER === "neuronai"

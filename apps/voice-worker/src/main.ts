@@ -110,9 +110,10 @@ async function main(): Promise<void> {
   // the browser to play; otherwise the browser speaks the text itself.
   const ttsKind = config.ttsProvider ?? config.voiceProvider;
   const serverAudio = ttsKind === "neuronai" || ttsKind === "openai";
-  // Server-side STT is the OpenAI-compatible transcription path (e.g. Groq Whisper).
+  // Server-side STT is the OpenAI-compatible transcription path (e.g. Groq Whisper)
+  // or NeuronAI's native Uzbek STT — both transcribe on the server.
   const sttKind = config.sttProvider ?? config.voiceProvider;
-  const sttServer = sttKind === "openai";
+  const sttServer = sttKind === "openai" || sttKind === "neuronai";
   const gateway = startVoiceGateway({
     port: config.wsPort,
     hmacSecret: config.hmacSecret,

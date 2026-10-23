@@ -1,5 +1,6 @@
 import type { AudioChunk } from "./types";
 import type { TtsOptions, TtsProvider } from "./tts";
+import type { SttOptions, SttProvider, SttResult } from "./stt";
 
 /**
  * NeuronAI native Uzbek text-to-speech (my.neuronai.uz). NOT OpenAI-compatible —
@@ -51,5 +52,63 @@ export class NeuronAiTtsProvider implements TtsProvider {
     }
     const bytes = new Uint8Array(await response.arrayBuffer());
     yield { data: bytes, sampleRate: 24000, encoding: "wav" };
+  }
+}
+
+export interface NeuronAiSttConfig {
+  apiKey: string;
+  baseUrl?: string;
+}
+
+/**
+ * NeuronAI native Uzbek speech-to-text (my.neuronai.uz). NOT OpenAI-compatible —
+ * `POST /stt/transcribe` (multipart `file` + `language`) returns
+ * `{ data: { text, language, duration_seconds } }`. Far better on Uzbek than a
+ * generic Whisper endpoint. Billed per request. Accepts the dev/PSTN `wav` and
+ * the browser mic's opus-in-webm; raw pcm16 is wrapped as wav upstream.
+ */
+export class NeuronAiSttProvider implements SttProvider {
+  readonly name = "neuronai-stt";
+  constructor(private readonly config: NeuronAiSttConfig) {}
+
+  async *transcribe(audio: AsyncIterable<AudioChunk>, options: SttOptions): AsyncIterable<SttResult> {
+    const parts: Uint8Array[] = [];
+    let encoding: AudioChunk["encoding"] = "wav";
+    for await (const chunk of audio) {
+      parts.push(chunk.data);
+      encoding = chunk.encoding;
+    }
+    if (parts.length === 0) return;
+
+    const { type, filename } =
+      encoding === "opus"
+        ? { type: "audio/webm", filename: "audio.webm" }
+        : { type: "audio/wav", filename: "audio.wav" };
+    const base = (this.config.baseUrl ?? DEFAULT_BASE).replace(/\/$/, "");
+    const form = new FormData();
+    form.set("file", new Blob(parts, { type }), filename);
+    const language = options.languages[0];
+    if (language) form.set("language", language);
+
+    const response = await fetch(`${base}/stt/transcribe`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${this.config.apiKey}` },
+      body: form,
+    });
+    if (!response.ok) {
+      throw new Error(`NeuronAI STT ${response.status}: ${(await response.text()).slice(0, 200)}`);
+    }
+    const json = (await response.json()) as {
+      data?: { text?: string; language?: string };
+      text?: string;
+    };
+    const text = (json.data?.text ?? json.text ?? "").trim();
+    if (!text) return;
+    yield {
+      transcript: text,
+      isFinal: true,
+      confidence: 1,
+      detectedLanguage: json.data?.language ?? language,
+    };
   }
 }

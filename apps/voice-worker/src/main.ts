@@ -126,9 +126,35 @@ async function main(): Promise<void> {
     logger: (message) => console.warn("[voice-worker]", message),
   });
   console.info("[voice-worker] Test-Agent gateway ready on ws://0.0.0.0:%d", config.wsPort);
-  if (config.livekitUrl) {
+
+  // Live media (SIP) path: join a LiveKit room and run one real call. For a dev
+  // test set LIVEKIT_URL + LIVEKIT_API_KEY/SECRET + LIVEKIT_DEV_ROOM +
+  // LIVEKIT_DEV_AGENT_ID. Full SIP auto-dispatch is wired separately — see
+  // docs/SIP_INTEGRATION.md.
+  if (
+    config.livekitUrl &&
+    config.livekitApiKey &&
+    config.livekitApiSecret &&
+    config.livekitDevRoom &&
+    config.livekitDevAgentId
+  ) {
+    const { runLiveKitCall } = await import("./livekit-runner");
+    console.info("[voice-worker] joining LiveKit room %s …", config.livekitDevRoom);
+    void runLiveKitCall({
+      url: config.livekitUrl,
+      apiKey: config.livekitApiKey,
+      apiSecret: config.livekitApiSecret,
+      roomName: config.livekitDevRoom,
+      agentId: config.livekitDevAgentId,
+      internal,
+      providers,
+      storage,
+      llmModel: config.llmModel,
+      logger: (message) => console.warn("[voice-worker]", message),
+    }).catch((error) => console.error("[voice-worker] LiveKit call failed:", error));
+  } else if (config.livekitUrl) {
     console.info(
-      "[voice-worker] LIVEKIT_URL is set, but the live SIP media transport needs @livekit/rtc-node + a server (see livekit-transport.ts).",
+      "[voice-worker] LIVEKIT_URL set. For a live call also set LIVEKIT_API_KEY/SECRET + LIVEKIT_DEV_ROOM + LIVEKIT_DEV_AGENT_ID (and install @livekit/rtc-node). See docs/SIP_INTEGRATION.md.",
     );
   }
 

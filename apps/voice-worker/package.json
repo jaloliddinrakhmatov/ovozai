@@ -19,6 +19,10 @@
     "dotenv": "catalog:",
     "ws": "catalog:"
   },
+  "optionalDependencies": {
+    "@livekit/rtc-node": "^0.13.11",
+    "livekit-server-sdk": "^2.13.1"
+  },
   "devDependencies": {
     "@ovozai/config": "workspace:*",
     "@types/node": "catalog:",

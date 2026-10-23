@@ -10,8 +10,13 @@ export interface VoiceWorkerConfig {
   /** Internal-channel service token + HMAC secret (must match the API). */
   serviceToken: string;
   hmacSecret: string;
-  /** LiveKit server URL — required only for the live media transport (Phase 4+). */
+  /** LiveKit server URL + API credentials — for the live media (SIP) transport. */
   livekitUrl: string;
+  livekitApiKey?: string;
+  livekitApiSecret?: string;
+  /** Dev: a room to join + agent to run on startup, to test one live call. */
+  livekitDevRoom?: string;
+  livekitDevAgentId?: string;
   /** Provider selection for STT/LLM/TTS. "local" needs no keys. */
   voiceProvider: "local" | "openai";
   /** Per-modality overrides (default to voiceProvider). Lets a deployment run a
@@ -50,6 +55,10 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     serviceToken: process.env.INTERNAL_SERVICE_TOKEN ?? "dev-insecure-service-token-change-me",
     hmacSecret: process.env.INTERNAL_HMAC_SECRET ?? "dev-insecure-hmac-secret-change-me-0123456789",
     livekitUrl: process.env.LIVEKIT_URL ?? "",
+    livekitApiKey: process.env.LIVEKIT_API_KEY,
+    livekitApiSecret: process.env.LIVEKIT_API_SECRET,
+    livekitDevRoom: process.env.LIVEKIT_DEV_ROOM,
+    livekitDevAgentId: process.env.LIVEKIT_DEV_AGENT_ID,
     voiceProvider: process.env.VOICE_PROVIDER === "openai" ? "openai" : "local",
     sttProvider: process.env.VOICE_STT_PROVIDER === "openai" ? "openai" : process.env.VOICE_STT_PROVIDER === "local" ? "local" : undefined,
     llmProvider: process.env.VOICE_LLM_PROVIDER === "openai" ? "openai" : process.env.VOICE_LLM_PROVIDER === "local" ? "local" : undefined,

@@ -8,4 +8,7 @@ export default defineConfig({
   clean: true,
   sourcemap: true,
   dts: false,
+  // LiveKit SDKs are optional + dynamically imported (native bindings); never
+  // bundle them — resolve from node_modules at runtime when configured.
+  external: ["@livekit/rtc-node", "livekit-server-sdk"],
 });

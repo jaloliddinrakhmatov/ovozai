@@ -3,7 +3,7 @@ import type { LlmProvider } from "./llm";
 import type { TtsProvider } from "./tts";
 import { LocalRuleLlmProvider, LocalSttProvider, LocalTtsProvider } from "./providers-local";
 import { OpenAiLlmProvider, OpenAiSttProvider, OpenAiTtsProvider } from "./providers-openai";
-import { NeuronAiTtsProvider } from "./providers-neuronai";
+import { NeuronAiSttProvider, NeuronAiTtsProvider } from "./providers-neuronai";
 
 export interface VoiceProviders {
   stt: SttProvider;
@@ -12,15 +12,16 @@ export interface VoiceProviders {
 }
 
 type Modality = "local" | "openai";
-/** TTS additionally supports NeuronAI's native (non-OpenAI) Uzbek voice. */
+/** STT and TTS additionally support NeuronAI's native (non-OpenAI) Uzbek voice. */
 type TtsModality = Modality | "neuronai";
+type SttModality = Modality | "neuronai";
 
 export interface VoiceProviderConfig {
   /** Default provider for all three modalities (back-compat). */
   provider?: Modality;
   /** Per-modality overrides. Lets a deployment mix providers — e.g. a real
    *  OpenAI-compatible LLM (Groq/Gemini) with NeuronAI TTS + browser STT. */
-  sttProvider?: Modality;
+  sttProvider?: SttModality;
   llmProvider?: Modality;
   ttsProvider?: TtsModality;
   /** Shared credentials for the OpenAI-compatible adapters (OpenAI, Groq, …).
@@ -48,7 +49,7 @@ export interface VoiceProviderConfig {
  */
 export function createVoiceProviders(config: VoiceProviderConfig = {}): VoiceProviders {
   const fallback = config.provider ?? "local";
-  const sttKind = config.sttProvider ?? fallback;
+  const sttKind: SttModality = config.sttProvider ?? fallback;
   const llmKind = config.llmProvider ?? fallback;
   const ttsKind: TtsModality = config.ttsProvider ?? fallback;
 
@@ -63,9 +64,14 @@ export function createVoiceProviders(config: VoiceProviderConfig = {}): VoicePro
 
   return {
     stt:
-      sttKind === "openai"
-        ? new OpenAiSttProvider({ ...cred("STT", config.sttApiKey, config.sttBaseUrl), model: config.sttModel })
-        : new LocalSttProvider(),
+      sttKind === "neuronai"
+        ? new NeuronAiSttProvider({
+            apiKey: cred("STT", config.sttApiKey, config.sttBaseUrl).apiKey,
+            baseUrl: config.sttBaseUrl ?? config.baseUrl,
+          })
+        : sttKind === "openai"
+          ? new OpenAiSttProvider({ ...cred("STT", config.sttApiKey, config.sttBaseUrl), model: config.sttModel })
+          : new LocalSttProvider(),
     llm:
       llmKind === "openai"
         ? new OpenAiLlmProvider({ ...cred("LLM", config.llmApiKey, config.llmBaseUrl), model: config.llmModel })

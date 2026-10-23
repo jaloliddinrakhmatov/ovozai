@@ -38,8 +38,12 @@ export async function runLiveKitCall(opts: LiveKitCallOptions): Promise<void> {
   const { AccessToken } = await import("livekit-server-sdk");
   const { Room, RoomEvent, AudioStream, AudioSource, LocalAudioTrack, AudioFrame, TrackPublishOptions } = rtc;
 
-  // Mint a join token for the agent participant.
-  const at = new AccessToken(opts.apiKey, opts.apiSecret, { identity: opts.identity ?? "ovozai-agent", ttl: 3600 });
+  // Mint a join token for the agent participant. The identity MUST be unique per
+  // run: LiveKit kicks the older participant when a new one joins with the same
+  // identity, so a stale/duplicate worker would otherwise disconnect this call
+  // (inbound stream breaks → premature caller_hangup).
+  const identity = opts.identity ?? `ovozai-agent-${Date.now().toString(36)}`;
+  const at = new AccessToken(opts.apiKey, opts.apiSecret, { identity, ttl: 3600 });
   at.addGrant({ roomJoin: true, room: opts.roomName, canPublish: true, canSubscribe: true });
   const token = await at.toJwt();
 
@@ -53,11 +57,13 @@ export async function runLiveKitCall(opts: LiveKitCallOptions): Promise<void> {
   room.on(RoomEvent.TrackSubscribed, (...args: unknown[]) => {
     // (track, publication, participant) — take the first subscribed audio track as the caller.
     if (resolveTrack) {
+      log("livekit: caller track subscribed");
       resolveTrack(args[0]);
       resolveTrack = null;
     }
   });
   room.on(RoomEvent.Disconnected, () => {
+    log("livekit: disconnected from room");
     disconnected = true;
   });
 

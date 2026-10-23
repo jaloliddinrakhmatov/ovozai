@@ -355,6 +355,11 @@ export class InternalService {
       return this.unavailableBooking(check.reason, check.suggestions, policy, call.language);
     }
 
+    // The name the caller states on the call is authoritative: set it on a newly
+    // created customer AND update an existing one matched by phone, so the booking
+    // reflects who is actually on the call rather than a stale record.
+    // (`prisma.base` is the unscoped internal client — `update` is allowed here.)
+    const spokenName = dto.customerName?.trim() || undefined;
     let customerId = call.customerId;
     if (!customerId) {
       const phone = dto.phone ?? call.fromE164 ?? null;
@@ -362,20 +367,35 @@ export class InternalService {
         const existingCustomer = await this.prisma.base.customer.findFirst({
           where: { organizationId, phoneE164: phone, deletedAt: null },
         });
-        customerId =
-          existingCustomer?.id ??
-          (
+        if (existingCustomer) {
+          customerId = existingCustomer.id;
+          if (spokenName && spokenName !== existingCustomer.name) {
+            await this.prisma.base.customer.update({
+              where: { id: existingCustomer.id },
+              data: { name: spokenName },
+            });
+          }
+        } else {
+          customerId = (
             await this.prisma.base.customer.create({
-              data: { organizationId, phoneE164: phone, name: dto.customerName },
+              data: { organizationId, phoneE164: phone, name: spokenName },
             })
           ).id;
+        }
       } else {
         const created = await this.prisma.base.customer.create({
-          data: { organizationId, phoneE164: "+000000000000", name: dto.customerName ?? "Caller" },
+          data: { organizationId, phoneE164: "+000000000000", name: spokenName ?? "Caller" },
         });
         customerId = created.id;
       }
       await this.prisma.base.call.update({ where: { id: call.id }, data: { customerId } });
+    } else if (spokenName) {
+      // The call is already linked to a customer, but the caller just gave a name —
+      // keep the record current.
+      await this.prisma.base.customer.updateMany({
+        where: { id: customerId, organizationId, name: { not: spokenName } },
+        data: { name: spokenName },
+      });
     }
 
     const endsAt = explicitEnd ?? new Date(start.getTime() + durationMin * 60_000);

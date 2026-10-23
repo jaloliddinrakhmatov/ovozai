@@ -23,6 +23,9 @@ export interface CallSessionDeps {
   transport: AudioTransport;
   storage?: StorageProvider;
   llmModel?: string;
+  /** Hard cap on caller turns (0/undefined = unlimited). Bounds STT/LLM/TTS cost
+   *  on a public demo — after the cap the session ends once the reply is spoken. */
+  maxCallerTurns?: number;
   /** Called for every finalized transcript turn (for live browser captions). */
   onTranscript?: (turn: { role: TranscriptRole; text: string; language: Language }) => void;
   logger?: (message: string) => void;
@@ -366,6 +369,11 @@ export class CallSession {
       if (result.kind === "end") {
         this.endedReason = result.reason ?? "agent_ended";
         this.endStatus = result.endStatus ?? "COMPLETED";
+        break;
+      }
+      // Demo cost guard: stop after the configured number of caller turns.
+      if (this.deps.maxCallerTurns && this.turnCount >= this.deps.maxCallerTurns) {
+        this.endedReason = "demo_turn_limit";
         break;
       }
       this.state = "listening";

@@ -48,6 +48,7 @@ services:
     rootDir: .
     buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm exec turbo run build --filter=@ovozai/voice-worker
     startCommand: node apps/voice-worker/dist/main.js
+    healthCheckPath: /
     envVars:
       - key: NODE_ENV
         value: production
@@ -83,6 +84,10 @@ services:
         value: kamron
       - key: VOICE_TTS_API_KEY
         sync: false
-      # Cost guard for a public demo: cap concurrent voice sessions.
+      # Cost guards for a public demo (NeuronAI STT/TTS are billed per request).
       - key: VOICE_WORKER_MAX_SESSIONS
         value: "3"
+      - key: VOICE_MAX_SESSIONS_PER_DAY
+        value: "100"
+      - key: VOICE_MAX_TURNS_PER_CALL
+        value: "16"

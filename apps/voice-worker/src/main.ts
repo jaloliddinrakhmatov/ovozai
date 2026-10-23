@@ -124,6 +124,8 @@ async function main(): Promise<void> {
     serverAudio,
     sttServer,
     maxSessions: config.maxConcurrentSessions,
+    maxSessionsPerDay: config.maxSessionsPerDay,
+    maxTurnsPerCall: config.maxTurnsPerCall,
     logger: (message) => console.warn("[voice-worker]", message),
   });
   console.info("[voice-worker] Test-Agent gateway ready on ws://0.0.0.0:%d", config.wsPort);

@@ -38,6 +38,9 @@ export interface VoiceWorkerConfig {
   llmModel?: string;
   ttsModel?: string;
   maxConcurrentSessions: number;
+  /** Public-demo cost guards (undefined = off). */
+  maxSessionsPerDay?: number;
+  maxTurnsPerCall?: number;
   /** Port for the browser "Test Agent" WebSocket gateway. */
   wsPort: number;
   logLevel: string;
@@ -89,6 +92,12 @@ export function loadVoiceWorkerConfig(): VoiceWorkerConfig {
     llmModel: process.env.VOICE_LLM_MODEL,
     ttsModel: process.env.VOICE_TTS_MODEL,
     maxConcurrentSessions: Number(process.env.VOICE_WORKER_MAX_SESSIONS ?? 10),
+    maxSessionsPerDay: process.env.VOICE_MAX_SESSIONS_PER_DAY
+      ? Number(process.env.VOICE_MAX_SESSIONS_PER_DAY)
+      : undefined,
+    maxTurnsPerCall: process.env.VOICE_MAX_TURNS_PER_CALL
+      ? Number(process.env.VOICE_MAX_TURNS_PER_CALL)
+      : undefined,
     wsPort: Number(process.env.PORT ?? process.env.VOICE_WS_PORT ?? 8787),
     logLevel: process.env.LOG_LEVEL ?? "info",
   };

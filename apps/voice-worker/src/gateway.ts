@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { IncomingMessage } from "node:http";
+import { createServer, type IncomingMessage } from "node:http";
 import { WebSocketServer, type WebSocket } from "ws";
 import type { StorageProvider, VoiceProviders } from "@ovozai/integrations";
 import { CallSession } from "./call-session";
@@ -53,6 +53,10 @@ export interface VoiceGatewayDeps {
   /** True when a real STT provider is configured (browser streams mic audio). */
   sttServer?: boolean;
   maxSessions: number;
+  /** Public-demo cost guard: max sessions accepted per calendar day (0 = off). */
+  maxSessionsPerDay?: number;
+  /** Public-demo cost guard: max caller turns per session (0 = off). */
+  maxTurnsPerCall?: number;
   logger?: (message: string) => void;
 }
 
@@ -62,8 +66,18 @@ export interface VoiceGatewayDeps {
  * channel and runs a real CallSession bound to a WebSocketTransport.
  */
 export function startVoiceGateway(deps: VoiceGatewayDeps): WebSocketServer {
-  const wss = new WebSocketServer({ port: deps.port });
   let active = 0;
+  let dayKey = new Date().toISOString().slice(0, 10);
+  let dayCount = 0;
+
+  // A real HTTP server so PaaS health checks (GET /) get a 200; the WS gateway
+  // attaches to it for the upgrade handshake (a bare WebSocketServer answers
+  // plain HTTP with 426, which fails health checks on Render/Railway/etc.).
+  const httpServer = createServer((_req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ status: "ok", service: "voice-worker", active }));
+  });
+  const wss = new WebSocketServer({ server: httpServer });
 
   wss.on("connection", (ws: WebSocket, req: IncomingMessage) => {
     const ticket = new URL(req.url ?? "", "http://localhost").searchParams.get("ticket") ?? "";
@@ -78,14 +92,28 @@ export function startVoiceGateway(deps: VoiceGatewayDeps): WebSocketServer {
       ws.close();
       return;
     }
+    // Public-demo daily cost cap (resets each calendar day).
+    const today = new Date().toISOString().slice(0, 10);
+    if (today !== dayKey) {
+      dayKey = today;
+      dayCount = 0;
+    }
+    if (deps.maxSessionsPerDay && dayCount >= deps.maxSessionsPerDay) {
+      ws.send(JSON.stringify({ type: "error", message: "daily demo limit reached — please try again tomorrow" }));
+      ws.close();
+      return;
+    }
     active += 1;
+    dayCount += 1;
     void runSession(ws, payload, deps).finally(() => {
       active -= 1;
     });
   });
 
   wss.on("error", (error) => deps.logger?.(`voice gateway error: ${error.message}`));
-  deps.logger?.(`voice gateway listening on ws://0.0.0.0:${deps.port}`);
+  httpServer.on("error", (error) => deps.logger?.(`voice gateway http error: ${error.message}`));
+  wss.on("close", () => httpServer.close());
+  httpServer.listen(deps.port, () => deps.logger?.(`voice gateway listening on :${deps.port}`));
   return wss;
 }
 
@@ -118,6 +146,7 @@ async function runSession(
       transport,
       storage: deps.storage,
       llmModel: deps.llmModel,
+      maxCallerTurns: deps.maxTurnsPerCall,
       onTranscript: (turn) =>
         transport.send({
           type: "caption",

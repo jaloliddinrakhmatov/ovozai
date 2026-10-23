@@ -113,6 +113,7 @@ export const API_ROUTES = {
   integrations: {
     root: `${API_BASE_PATH}/integrations`,
     byId: (id: string): string => `${API_BASE_PATH}/integrations/${id}`,
+    googleCalendarConnect: `${API_BASE_PATH}/integrations/google/calendar/connect`,
   },
   notifications: {
     root: `${API_BASE_PATH}/notifications`,

@@ -11,3 +11,5 @@ export * from "./voice-providers";
 export * from "./stt-fallback";
 export * from "./storage";
 export * from "./business-providers";
+
+export * from "./google-calendar";

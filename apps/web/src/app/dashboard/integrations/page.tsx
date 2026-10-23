@@ -21,6 +21,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
   createIntegration,
   deleteIntegration,
+  getGoogleCalendarAuthUrl,
   listIntegrations,
 } from "@/lib/integrations-api";
 import { describeError, zodFieldErrors, type FieldErrors } from "@/lib/form";
@@ -167,9 +168,95 @@ function IntegrationRow({
   );
 }
 
+function GoogleCalendarCard({
+  integrations,
+  onChanged,
+}: {
+  integrations: IntegrationDto[];
+  onChanged: () => void;
+}) {
+  const connected = integrations.find(
+    (i) => i.type === "CALENDAR" && i.provider === "google" && i.status === "CONNECTED",
+  );
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const connect = async () => {
+    setErr(null);
+    setBusy(true);
+    try {
+      const { url } = await getGoogleCalendarAuthUrl();
+      window.location.href = url;
+    } catch (e) {
+      setErr(describeError(e).message);
+      setBusy(false);
+    }
+  };
+  const disconnect = async () => {
+    if (!connected) return;
+    setBusy(true);
+    try {
+      await deleteIntegration(connected.id);
+      onChanged();
+    } catch (e) {
+      setErr(describeError(e).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardContent className="flex flex-col gap-4 pt-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <span className="grid h-11 w-11 place-items-center rounded-xl border border-white/10 bg-white/5 text-white/80">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
+                <rect x="3" y="4.5" width="18" height="16" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
+                <path d="M3 9.5h18M8 2.5v4M16 2.5v4M12 13.5v3M10.5 15h3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </span>
+            <div>
+              <p className="font-medium">Google Calendar</p>
+              <p className="text-sm text-muted-foreground">
+                {connected
+                  ? "Connected — appointments the AI books appear in your Google Calendar."
+                  : "Connect so appointments the AI books are added to your Google Calendar automatically."}
+              </p>
+            </div>
+          </div>
+          {connected ? (
+            <div className="flex items-center gap-2">
+              <span className="rounded-full bg-emerald-400/10 px-2.5 py-1 text-xs font-medium text-emerald-300">
+                Connected
+              </span>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => void disconnect()}>
+                {busy ? "Working…" : "Disconnect"}
+              </Button>
+            </div>
+          ) : (
+            <Button disabled={busy} onClick={() => void connect()}>
+              {busy ? "Opening…" : "Connect Google Calendar"}
+            </Button>
+          )}
+        </div>
+        {err ? <Alert variant="destructive">{err}</Alert> : null}
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function IntegrationsPage() {
   const { activeRole } = useAuth();
   const canManage = activeRole ? roleSatisfies(activeRole, "ADMIN") : false;
+  const [calBanner, setCalBanner] = useState<{ ok: boolean; reason?: string } | null>(null);
+
+  useEffect(() => {
+    const sp = new URLSearchParams(window.location.search);
+    const c = sp.get("calendar");
+    if (c === "connected") setCalBanner({ ok: true });
+    else if (c === "error") setCalBanner({ ok: false, reason: sp.get("reason") ?? undefined });
+  }, []);
 
   const [integrations, setIntegrations] = useState<IntegrationDto[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -219,6 +306,19 @@ export default function IntegrationsPage() {
           Connect calendars, CRMs, payments, and telephony providers to this organization.
         </p>
       </div>
+
+      {calBanner?.ok ? (
+        <Alert variant="success">
+          Google Calendar connected. New appointments the AI books will appear there.
+        </Alert>
+      ) : null}
+      {calBanner && !calBanner.ok ? (
+        <Alert variant="destructive">
+          Couldn&apos;t connect Google Calendar{calBanner.reason ? ` (${calBanner.reason})` : ""}. Please try again.
+        </Alert>
+      ) : null}
+
+      <GoogleCalendarCard integrations={integrations} onChanged={reload} />
 
       <ConnectIntegrationForm onCreated={reload} />
 

@@ -43,3 +43,9 @@ export async function createIntegration(
 export async function deleteIntegration(id: string): Promise<void> {
   await apiFetch(API_ROUTES.integrations.byId(id), { method: "DELETE" });
 }
+
+/** `GET /integrations/google/calendar/connect` — the Google consent URL to open. */
+export async function getGoogleCalendarAuthUrl(): Promise<{ url: string }> {
+  const data = (await apiFetch(API_ROUTES.integrations.googleCalendarConnect)) as { url: string };
+  return data;
+}

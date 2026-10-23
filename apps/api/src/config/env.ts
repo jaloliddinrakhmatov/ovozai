@@ -48,6 +48,13 @@ const envSchema = z
     /** Max age (seconds) of a signed internal request before it is rejected. */
     INTERNAL_SIGNATURE_MAX_AGE_SECONDS: z.coerce.number().int().positive().default(300),
 
+    // --- Google Calendar integration (OAuth; optional, per-org connect) ---
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    GOOGLE_REDIRECT_URI: z
+      .string()
+      .default("http://localhost:3001/api/v1/integrations/google/calendar/callback"),
+
     // --- Object storage for recordings (Phase 5). Must match the voice-worker. ---
     STORAGE_PROVIDER: z.enum(["local", "s3"]).default("local"),
     STORAGE_LOCAL_DIR: z.string().optional(),

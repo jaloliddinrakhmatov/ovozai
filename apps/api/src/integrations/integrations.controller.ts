@@ -23,6 +23,12 @@ export class IntegrationsController {
     return this.integrations.list(query);
   }
 
+  /** Start a Google Calendar connect flow — returns the consent URL to open. */
+  @Get("google/calendar/connect")
+  googleCalendarConnect(@CurrentPrincipal() principal: UserPrincipal): { url: string } {
+    return this.integrations.getGoogleCalendarAuthUrl(principal.organizationId as string);
+  }
+
   @Post()
   connect(
     @CurrentPrincipal() principal: UserPrincipal,

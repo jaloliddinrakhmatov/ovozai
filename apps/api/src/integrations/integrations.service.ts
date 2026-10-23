@@ -1,5 +1,12 @@
+import { createHmac, timingSafeEqual } from "node:crypto";
 import { Inject, Injectable, Logger } from "@nestjs/common";
-import type { CalendarProvider } from "@ovozai/integrations";
+import { ConfigService } from "@nestjs/config";
+import {
+  buildGoogleAuthUrl,
+  createGoogleCalendarEvent,
+  exchangeGoogleCode,
+  type CalendarProvider,
+} from "@ovozai/integrations";
 import type { CreateIntegrationRequest, IntegrationDto, PaginationQuery } from "@ovozai/contracts";
 import { Prisma } from "@ovozai/database";
 import { AuditService } from "../audit/audit.service";
@@ -29,6 +36,7 @@ export class IntegrationsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly config: ConfigService,
     @Inject(CALENDAR_PROVIDER) private readonly calendar: CalendarProvider,
   ) {}
 
@@ -99,10 +107,118 @@ export class IntegrationsService {
     });
   }
 
+  // --- Google Calendar OAuth (per-org connect) ---------------------------
+
+  /** The Google consent URL to start a connect flow for this org. */
+  getGoogleCalendarAuthUrl(organizationId: string): { url: string } {
+    const clientId = this.config.get<string>("GOOGLE_CLIENT_ID");
+    const redirectUri = this.config.get<string>("GOOGLE_REDIRECT_URI") ?? "";
+    if (!clientId) {
+      throw Problems.unprocessable(
+        "Google Calendar is not configured on the server (set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET).",
+      );
+    }
+    return { url: buildGoogleAuthUrl({ clientId, redirectUri, state: this.signState(organizationId) }) };
+  }
+
+  /**
+   * Handle Google's OAuth redirect: verify state, exchange the code for a refresh
+   * token, and store it on the org's CALENDAR integration. Returns the dashboard
+   * URL to redirect the browser to. No auth context here (public callback), so it
+   * uses the base client with the org recovered from the signed state.
+   */
+  async handleGoogleCalendarCallback(code?: string, state?: string, error?: string): Promise<string> {
+    const webUrl = (this.config.get<string>("APP_WEB_URL") ?? "http://localhost:3000").replace(/\/$/, "");
+    const fail = (reason: string) =>
+      `${webUrl}/dashboard/integrations?calendar=error&reason=${encodeURIComponent(reason)}`;
+
+    if (error) return fail(error);
+    if (!code || !state) return fail("missing_code");
+    const organizationId = this.verifyState(state);
+    if (!organizationId) return fail("invalid_state");
+
+    const clientId = this.config.get<string>("GOOGLE_CLIENT_ID") ?? "";
+    const clientSecret = this.config.get<string>("GOOGLE_CLIENT_SECRET") ?? "";
+    const redirectUri = this.config.get<string>("GOOGLE_REDIRECT_URI") ?? "";
+    try {
+      const tokens = await exchangeGoogleCode({ clientId, clientSecret, code, redirectUri });
+      if (!tokens.refreshToken) return fail("no_refresh_token");
+
+      // NOTE: the refresh token is stored in `config` for this dev build; in
+      // production it belongs in a KMS-backed secret store (docs/SECURITY.md).
+      const config = {
+        refreshToken: tokens.refreshToken,
+        calendarId: "primary",
+        connectedAt: new Date().toISOString(),
+      } satisfies Record<string, unknown>;
+
+      const existing = await this.prisma.base.integration.findFirst({
+        where: { organizationId, type: "CALENDAR", provider: "google" },
+      });
+      let integrationId: string;
+      if (existing) {
+        await this.prisma.base.integration.update({
+          where: { id: existing.id },
+          data: { status: "CONNECTED", deletedAt: null, config: config as Prisma.InputJsonValue },
+        });
+        integrationId = existing.id;
+      } else {
+        const created = await this.prisma.base.integration.create({
+          data: {
+            organizationId,
+            type: "CALENDAR",
+            provider: "google",
+            status: "CONNECTED",
+            config: config as Prisma.InputJsonValue,
+            secretRef: "google-oauth-refresh",
+          },
+        });
+        integrationId = created.id;
+      }
+      await this.audit.record({
+        organizationId,
+        actorType: "SYSTEM",
+        action: "integration.google_calendar.connect",
+        targetType: "Integration",
+        targetId: integrationId,
+      });
+      return `${webUrl}/dashboard/integrations?calendar=connected`;
+    } catch (e) {
+      this.logger.warn(`Google Calendar connect failed for org ${organizationId}: ${String(e)}`);
+      return fail("exchange_failed");
+    }
+  }
+
+  private signState(organizationId: string): string {
+    const exp = Math.floor(Date.now() / 1000) + 600; // 10 minutes
+    const payload = `${organizationId}.${exp}`;
+    const secret = this.config.get<string>("INTERNAL_HMAC_SECRET") ?? "";
+    const sig = createHmac("sha256", secret).update(payload).digest("base64url");
+    return Buffer.from(`${payload}.${sig}`).toString("base64url");
+  }
+
+  private verifyState(state: string): string | null {
+    try {
+      const [organizationId, expStr, sig] = Buffer.from(state, "base64url").toString("utf8").split(".");
+      if (!organizationId || !expStr || !sig) return null;
+      const secret = this.config.get<string>("INTERNAL_HMAC_SECRET") ?? "";
+      const expected = createHmac("sha256", secret).update(`${organizationId}.${expStr}`).digest("base64url");
+      const a = Buffer.from(sig);
+      const b = Buffer.from(expected);
+      if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
+      if (Number(expStr) * 1000 < Date.now()) return null;
+      return organizationId;
+    } catch {
+      return null;
+    }
+  }
+
   /**
    * Sync an appointment to the org's connected calendar, returning the external
    * event id (or null if no calendar is connected). Best-effort; base client +
-   * explicit org so it is callable from request + internal contexts.
+   * explicit org so it is callable from request + internal contexts. Uses the
+   * real Google Calendar API when a Google integration is connected, else the
+   * configured (mock) provider.
    */
   async syncAppointmentToCalendar(organizationId: string, input: CalendarSyncInput): Promise<string | null> {
     const integration = await this.prisma.base.integration.findFirst({
@@ -110,6 +226,29 @@ export class IntegrationsService {
     });
     if (!integration) return null;
     try {
+      if (integration.provider === "google") {
+        const cfg = (integration.config ?? {}) as Record<string, unknown>;
+        const refreshToken = typeof cfg.refreshToken === "string" ? cfg.refreshToken : "";
+        const clientId = this.config.get<string>("GOOGLE_CLIENT_ID") ?? "";
+        const clientSecret = this.config.get<string>("GOOGLE_CLIENT_SECRET") ?? "";
+        if (!refreshToken || !clientId || !clientSecret) return null;
+        const result = await createGoogleCalendarEvent({
+          clientId,
+          clientSecret,
+          refreshToken,
+          calendarId: typeof cfg.calendarId === "string" ? cfg.calendarId : "primary",
+          event: {
+            title: input.title,
+            startsAt: input.startsAt,
+            endsAt: input.endsAt,
+            description: input.customerName
+              ? `Booked for ${input.customerName} via OvozAI`
+              : "Booked via OvozAI",
+            timezone: "Asia/Tashkent",
+          },
+        });
+        return result.externalEventId;
+      }
       const result = await this.calendar.createEvent({ organizationId, ...input });
       return result.externalEventId;
     } catch (error) {

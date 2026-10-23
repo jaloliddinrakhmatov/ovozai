@@ -14,7 +14,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm db:generate && pnpm exec turbo run build --filter=@ovozai/api
+    buildCommand: pnpm install --frozen-lockfile && pnpm db:generate && pnpm exec turbo run build --filter=@ovozai/api
     startCommand: node apps/api/dist/main.js
     healthCheckPath: /api/v1/health
     envVars:
@@ -46,7 +46,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm exec turbo run build --filter=@ovozai/voice-worker
+    buildCommand: pnpm install --frozen-lockfile && pnpm exec turbo run build --filter=@ovozai/voice-worker
     startCommand: node apps/voice-worker/dist/main.js
     healthCheckPath: /
     envVars:

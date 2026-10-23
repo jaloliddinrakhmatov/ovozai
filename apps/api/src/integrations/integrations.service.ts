@@ -221,9 +221,16 @@ export class IntegrationsService {
    * configured (mock) provider.
    */
   async syncAppointmentToCalendar(organizationId: string, input: CalendarSyncInput): Promise<string | null> {
-    const integration = await this.prisma.base.integration.findFirst({
-      where: { organizationId, type: "CALENDAR", status: "CONNECTED", deletedAt: null },
+    // Prefer a connected Google Calendar; fall back to any other connected
+    // calendar (e.g. the mock) only if Google isn't connected.
+    const google = await this.prisma.base.integration.findFirst({
+      where: { organizationId, type: "CALENDAR", provider: "google", status: "CONNECTED", deletedAt: null },
     });
+    const integration =
+      google ??
+      (await this.prisma.base.integration.findFirst({
+        where: { organizationId, type: "CALENDAR", status: "CONNECTED", deletedAt: null },
+      }));
     if (!integration) return null;
     try {
       if (integration.provider === "google") {

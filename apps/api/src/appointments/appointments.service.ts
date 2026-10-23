@@ -153,22 +153,22 @@ export class AppointmentsService {
     return toAppointmentDto(await this.load(id));
   }
 
-  /** Cancel an appointment (sets status CANCELED; appointments are not deleted). */
-  async cancel(
+  /**
+   * Permanently remove an appointment. (To cancel without deleting, set its
+   * status to CANCELED via `update` — the dashboard status dropdown does this.)
+   */
+  async remove(
     principal: UserPrincipal,
     organizationId: string,
     id: string,
     ctx: RequestMeta,
   ): Promise<void> {
-    const result = await this.prisma.tenant.appointment.updateMany({
-      where: { id },
-      data: { status: "CANCELED" },
-    });
+    const result = await this.prisma.tenant.appointment.deleteMany({ where: { id } });
     if (result.count === 0) throw Problems.notFound("Appointment not found.");
     await this.audit.record({
       organizationId,
       actorId: principal.userId,
-      action: "appointment.cancel",
+      action: "appointment.delete",
       targetType: "Appointment",
       targetId: id,
       ip: ctx.ip,

@@ -239,6 +239,9 @@ function AppointmentRow({
   };
 
   const onDelete = async () => {
+    if (!window.confirm(`Delete the appointment "${appointment.title}"? This can't be undone.`)) {
+      return;
+    }
     setError(null);
     setBusy(true);
     try {

@@ -55,11 +55,11 @@ export class AppointmentsController {
   @Delete(":id")
   @Roles("MEMBER")
   @HttpCode(204)
-  cancel(
+  remove(
     @CurrentPrincipal() principal: UserPrincipal,
     @Param("id") id: string,
     @Req() req: RequestWithContext,
   ): Promise<void> {
-    return this.appointments.cancel(principal, principal.organizationId as string, id, requestContextFrom(req));
+    return this.appointments.remove(principal, principal.organizationId as string, id, requestContextFrom(req));
   }
 }

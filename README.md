@@ -23,6 +23,10 @@
 
 ---
 
+> **Project status:** a **portfolio / demo** project — functional end to end as a live demo, but
+> **not yet production-ready**. See [**🚧 Status & what's next**](#-status--whats-next) for an honest
+> list of what still needs doing.
+
 ## ✨ Live Demo
 
 **👉 https://ovozai-rho.vercel.app**
@@ -237,6 +241,32 @@ The live demo runs entirely on free tiers:
 
 The Render Blueprint auto-deploys on push to `main`; secrets (DB URL, provider keys) live in the
 Render dashboard, never in the repo. Full write-up: [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md).
+
+## 🚧 Status & what's next
+
+This is a **portfolio project** — built to demonstrate a complete, realistic AI-voice SaaS. It works
+**end to end as a live demo**, but it is **not a finished, production-ready product**. An honest list
+of what still remains:
+
+- **Real telephony.** The LiveKit media transport is wired and unit-tested, but no SIP trunk or phone
+  number is provisioned — the demo answers calls through the **browser Test Agent**, not real inbound
+  PSTN calls. Live Uzbekistan numbers require a licensed local operator.
+- **Free-tier demo trade-offs.** The public demo skips **Redis + the jobs-worker** (the knowledge
+  base is pre-seeded instead of ingested live), **Google Calendar OAuth** isn't configured on the
+  demo server (bookings fall back to a mock sync), and the free services **cold-start (~50 s)** after
+  idle.
+- **Voice quality & latency.** Uzbek STT/TTS via NeuronAI is solid, but per-language voice selection
+  (RU/EN), barge-in tuning, and end-to-end latency are still being improved.
+- **Retrieval.** The knowledge base uses a local lexical embedder; **pgvector + semantic embeddings**
+  are the planned upgrade for larger document sets.
+- **Real business providers.** Payments (Stripe) and some integrations ship as mock / documented
+  adapters rather than live connections.
+- **Production hardening.** No external penetration test, SOC 2 evidence, at-scale load numbers, or
+  in-country data-residency placement yet — these are tracked as boundaries in
+  [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) and [`docs/PRODUCTION_READINESS.md`](docs/PRODUCTION_READINESS.md).
+
+In short: **a working, demonstrable system with a clear path to production — a work in progress, not
+a shipped commercial product.**
 
 ## 🧪 Scripts
 

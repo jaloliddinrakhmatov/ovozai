@@ -1,170 +1,266 @@
-# OvozAI
+<h1 align="center">🎙️ OvozAI</h1>
 
-> AI-powered Voice Receptionist SaaS for businesses in Uzbekistan — AI voice agents
-> that answer phone calls in **Uzbek, Russian, and English**, answer questions from a
-> knowledge base, book appointments, and transfer calls to human staff.
+<p align="center">
+  <b>An AI voice receptionist that answers your phone in Uzbek, Russian &amp; English</b><br/>
+  — answers from a knowledge base, books appointments, and hands off to a human when needed.
+</p>
 
-**Status:** Phase 7 complete — **all roadmap phases delivered.** Hardening & compliance adds
-PostgreSQL **Row-Level Security** (defense-in-depth tenant isolation, verified cross-tenant block
-even with the app guard bypassed), **data retention + right-to-erasure** (audited), and
-**observability** (a Prometheus `/metrics` endpoint + structured, PII-redacted, correlated JSON
-logs) — on top of the Phase 1–6 platform (auth, multi-tenancy, RBAC, AI agents, knowledge base,
-the Voice MVP, telephony, and billing + integrations). **External provider infra is not wired in
-this environment** — payments (Stripe), calendar (Google), CRM, email/SMS, a real SIP trunk /
-Uzbekistan numbers, the LiveKit audio hop, and real S3 sit behind interfaces with **mock/local
-defaults**; and the deployment/policy controls (in-country data residency, at-scale load numbers,
-external penetration test, SOC2 evidence) are **documented boundaries** in
-[`docs/COMPLIANCE.md`](docs/COMPLIANCE.md). Flows are verified via simulated calls + local
-providers and live smokes (see [`docs/ROADMAP.md`](docs/ROADMAP.md)). Running the full stack
-(`pnpm dev`) needs PostgreSQL + Redis up.
+<p align="center">
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-000000?logo=nextdotjs&logoColor=white">
+  <img alt="NestJS" src="https://img.shields.io/badge/NestJS-12-E0234E?logo=nestjs&logoColor=white">
+  <img alt="PostgreSQL" src="https://img.shields.io/badge/PostgreSQL-Prisma_7-4169E1?logo=postgresql&logoColor=white">
+  <img alt="Turborepo" src="https://img.shields.io/badge/Turborepo-pnpm-EF4444?logo=turborepo&logoColor=white">
+</p>
+
+<p align="center">
+  <a href="https://ovozai-rho.vercel.app"><b>🔴 Live Demo</b></a> ·
+  <a href="#-architecture">Architecture</a> ·
+  <a href="#-voice-pipeline">Voice pipeline</a> ·
+  <a href="#-running-locally">Run locally</a> ·
+  <a href="docs/">Docs</a>
+</p>
 
 ---
 
-## Tech stack
+## ✨ Live Demo
+
+**👉 https://ovozai-rho.vercel.app**
+
+Sign in with the demo account and try it end to end:
+
+```
+email:    demo@ovozai.uz
+password: ovozai-demo
+```
+
+Then open **Agents → “Luxe Qabulxona” → Test** and either type or **speak** (🎤) to the agent in
+Uzbek, Russian, or English. It greets you, answers salon questions from its knowledge base, and
+books an appointment — with a real, spoken reply.
+
+> ⚠️ **Free-tier note:** the backend sleeps after ~15 min of inactivity, so the *first* request
+> after a quiet period takes ~50 seconds to wake up. A refresh fixes it. Hosted on free tiers
+> (Vercel + Render + Neon) at **$0/month**.
+
+## 📸 Screenshots
+
+> 📷 _Best experienced live — [**try the demo**](https://ovozai-rho.vercel.app)._ To add images,
+> save `landing.png`, `dashboard.png`, `test-agent.png` into `docs/screenshots/` and uncomment the
+> table below.
+
+<!--
+| Landing | Dashboard | Voice Test Agent |
+| --- | --- | --- |
+| ![Landing](docs/screenshots/landing.png) | ![Dashboard](docs/screenshots/dashboard.png) | ![Voice test](docs/screenshots/test-agent.png) |
+-->
+
+
+## 🚀 What it does
+
+- 🗣️ **Multilingual voice** — Uzbek, Russian & English, with **per-turn language detection** (the
+  caller can switch languages mid-call and the agent follows).
+- 🎙️ **Native Uzbek speech** — real speech-to-text **and** text-to-speech via **NeuronAI** (a
+  native Uzbek voice), which is dramatically more accurate on Uzbek than a generic Whisper model.
+- 🧠 **Real LLM with tools** — the agent reasons and calls tools: `check_availability`,
+  `book_appointment`, `reschedule_appointment`, `cancel_appointment`, `knowledge_retrieval`,
+  `transfer_call`, `end_call`.
+- 📅 **Appointment booking** — a real availability engine (business hours, slot length, capacity,
+  lead time, lunch breaks), **conflict detection with alternative-slot suggestions**, timezone-aware
+  (`Asia/Tashkent`), with optional **Google Calendar** sync (per-business OAuth).
+- 📚 **Knowledge base + RAG** — agents answer from your documents; pluggable embeddings with an
+  app-side cosine retriever.
+- 🏢 **Multi-tenant SaaS** — strict org isolation via a Prisma **tenant extension** *and* PostgreSQL
+  **Row-Level Security** (defense-in-depth), RBAC, audit logging.
+- 🔐 **Auth** — short-lived access JWTs + rotating refresh tokens (reuse-detection), **argon2id**
+  password hashing.
+- 💳 **Billing** — plans, subscriptions, usage rollups & plan-limit enforcement.
+- 🔌 **Integrations** — webhooks (HMAC-signed), notifications, calendar — all behind swappable
+  provider interfaces (mock/local defaults, real adapters documented).
+- 📊 **Observability & compliance** — Prometheus `/metrics`, structured PII-redacted JSON logs,
+  data retention + right-to-erasure.
+- ☎️ **Telephony** — real-time media over **LiveKit** (SIP/WebRTC) is wired; the live demo uses a
+  browser **Test Agent** (the same `CallSession` orchestrator), so you can test instantly without a
+  phone number.
+
+## 🏗️ Architecture
+
+A **NestJS modular monolith** for the control plane, a **separately deployable real-time voice
+worker** for the media/AI loop, a **BullMQ jobs worker** for async work, and a **Next.js** dashboard —
+all in a Turborepo + pnpm monorepo with shared `contracts` (zod), `database` (Prisma), `ui`, and
+`integrations` packages.
+
+```mermaid
+flowchart TB
+    subgraph client["Client"]
+        Caller["📞 Caller<br/>(phone or browser)"]
+        Dash["🖥️ Dashboard<br/>Next.js 16"]
+    end
+
+    subgraph rt["Real-time voice"]
+        LK["LiveKit<br/>SIP / WebRTC"]
+        VW["voice-worker<br/>CallSession: STT → LLM → TTS<br/>+ barge-in, VAD"]
+    end
+
+    subgraph core["Control plane"]
+        API["API — NestJS<br/>auth · multi-tenancy · booking<br/>knowledge · billing · webhooks"]
+        JW["jobs-worker<br/>BullMQ: KB ingest,<br/>usage rollups, webhooks, retention"]
+    end
+
+    subgraph data["Data"]
+        PG[("PostgreSQL<br/>Prisma 7 + RLS")]
+        RD[("Redis<br/>cache + queues")]
+    end
+
+    subgraph prov["Pluggable providers"]
+        STT["STT — NeuronAI / Groq Whisper"]
+        LLM["LLM — Groq Qwen / OpenAI-compatible"]
+        TTS["TTS — NeuronAI (native Uzbek)"]
+        GCAL["Google Calendar (OAuth)"]
+    end
+
+    Caller --> LK --> VW
+    Dash -->|"REST /api/v1"| API
+    VW -->|"internal channel (service token + HMAC)"| API
+    VW --> STT & LLM & TTS
+    API --> PG & RD
+    API --> GCAL
+    API -->|enqueue| RD --> JW --> PG
+```
+
+**Key design decisions**
+
+- **Tenant isolation, twice.** `prisma.tenant` auto-scopes every tenant-bound query to the active
+  org (via an `AsyncLocalStorage` request context); PostgreSQL **RLS** is a second, independent guard
+  — verified to block cross-tenant reads even with the app guard bypassed.
+- **The voice worker never writes tenant data directly.** It reports calls, transcripts, bookings and
+  usage to the API over an **authenticated internal channel** (service token + HMAC over the raw
+  body), keeping all business logic and tenancy in one place.
+- **Everything external is an interface.** STT/LLM/TTS, payments, calendar, notifications, storage —
+  each has a provider interface with a local/mock default and real adapters, so the stack runs with
+  **zero API keys** in dev and swaps to real providers via env.
+
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and ADRs.
+
+## 🎙️ Voice pipeline
+
+Each caller turn runs speech-to-text → LLM (with tools) → text-to-speech, with barge-in support.
+The agent detects the caller's language per turn and replies in it.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Caller
+    participant V as voice-worker
+    participant S as STT (NeuronAI)
+    participant L as LLM (Groq, +tools)
+    participant A as API (control plane)
+    participant T as TTS (NeuronAI)
+
+    C->>V: speech (audio stream)
+    V->>S: transcribe (lang hint)
+    S-->>V: text + detected language
+    V->>L: text + tool schemas
+    opt tool call
+        L->>A: e.g. book_appointment / knowledge_retrieval
+        A-->>L: result (availability, booking, KB chunks)
+    end
+    L-->>V: reply text (same language)
+    V->>T: synthesize
+    T-->>V: audio
+    V-->>C: spoken reply
+    V->>A: transcript turn + lifecycle events
+```
+
+More detail: [`docs/VOICE_PIPELINE.md`](docs/VOICE_PIPELINE.md) · testing it:
+[`docs/VOICE_TESTING.md`](docs/VOICE_TESTING.md).
+
+## 🧰 Tech stack
 
 | Area | Choice |
 | --- | --- |
 | Monorepo | Turborepo 2.11 + pnpm 12 workspaces (version **catalog**) |
-| Frontend | Next.js 16 (App Router) · React 19 · Tailwind CSS 4 · shadcn/ui-style components |
-| Backend | NestJS 12 (modular monolith) |
-| Database | PostgreSQL 16 + Prisma 7 (driver adapter: `@prisma/adapter-pg`) |
-| Cache / queues | Redis 7 + BullMQ 6 |
+| Frontend | Next.js 16 (App Router) · React 19 · Tailwind CSS 4 |
+| Backend | NestJS 12 (modular monolith) + a standalone real-time voice worker |
+| Database | PostgreSQL + Prisma 7 (driver-adapter model, `@prisma/adapter-pg`) + RLS |
+| Cache / queues | Redis + BullMQ |
+| Voice (demo) | **NeuronAI** STT + TTS (native Uzbek) · **Groq** LLM (Qwen) · **LiveKit** media |
 | Language | TypeScript 5.9 (strict) |
-| Lint / format | ESLint 10 (flat config) + Prettier 3 |
-| Tests | Vitest 5 (unit + API e2e) + Playwright 1.64 (browser e2e) |
-| Infra (dev) | Docker Compose (PostgreSQL + Redis) |
+| Tooling | ESLint (flat config) · Prettier · Vitest · Playwright |
+| Hosting (demo) | **Vercel** (web) · **Render** (api + voice-worker) · **Neon** (Postgres) |
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design and the version-pinning
-rationale (notably: TypeScript stays on 5.9 for `typescript-eslint` compatibility, and
-Prisma stays on stable 7.x because npm `latest` is an 8.0 release candidate).
-
-## Prerequisites
-
-- **Node.js ≥ 20.9** (developed on 24.x). `.nvmrc` pins `24`.
-- **pnpm 12** via Corepack (bundled with Node — no separate install):
-  ```bash
-  corepack enable            # or: corepack prepare pnpm@12.14.0 --activate
-  ```
-- **PostgreSQL 16+ and Redis 7** — via **Docker Compose** (`pnpm docker:up`, recommended) **or**
-  natively. Docker-free on macOS: `brew services start postgresql@17` and
-  `brew install redis && brew services start redis`, then create the role/db to match
-  `DATABASE_URL` (`psql postgres -c "CREATE ROLE ovozai LOGIN PASSWORD 'ovozai' SUPERUSER;" -c
-  "CREATE DATABASE ovozai OWNER ovozai;"`). Building and testing need no database at all.
-
-## Quick start
-
-```bash
-# 1. Enable pnpm (once)
-corepack enable
-
-# 2. Environment
-cp .env.example .env
-
-# 3. Install dependencies
-pnpm install        # if prompted about build scripts: pnpm approve-builds --all
-
-# 4. Start infrastructure (PostgreSQL + Redis)
-pnpm docker:up
-
-# 5. Database: generate the client and apply the initial migration
-pnpm db:generate
-pnpm db:migrate:deploy      # applies the baseline migration to the running DB
-pnpm db:seed                # optional: demo organization + owner
-
-# 6. Run everything (web + api + workers) in watch mode
-pnpm dev
-```
-
-Then open:
-
-- Web: <http://localhost:3000>
-- API liveness: <http://localhost:3001/api/v1/health>
-- API readiness: <http://localhost:3001/api/v1/health/ready>
-
-The landing page shows a live **backend connection status** pill that polls the API's
-liveness endpoint.
-
-## Services & ports
-
-| App | Package | Port | Description |
-| --- | --- | --- | --- |
-| web | `@ovozai/web` | 3000 | Next.js landing page + (future) dashboard |
-| api | `@ovozai/api` | 3001 | NestJS business backend (base path `/api/v1`) |
-| voice-worker | `@ovozai/voice-worker` | — | LiveKit real-time agent (Phase 4 scaffold) |
-| jobs-worker | `@ovozai/jobs-worker` | — | BullMQ background jobs (scaffold) |
-| PostgreSQL | docker-compose | 5432 | primary database |
-| Redis | docker-compose | 6379 | cache + queues |
-
-## Scripts (run from the repo root)
-
-| Command | What it does |
-| --- | --- |
-| `pnpm dev` | Run all apps in watch mode (Turborepo) |
-| `pnpm build` | Build every package and app |
-| `pnpm typecheck` | `tsc --noEmit` across the monorepo |
-| `pnpm lint` | ESLint across the monorepo |
-| `pnpm test` | Unit tests (Vitest) |
-| `pnpm --filter @ovozai/api test:e2e` | API end-to-end tests (boots the app) |
-| `pnpm --filter @ovozai/web test:e2e` | Browser e2e (Playwright — run `playwright install chromium` once) |
-| `pnpm format` / `pnpm format:check` | Prettier write / check |
-| `pnpm docker:up` / `pnpm docker:down` | Start / stop PostgreSQL + Redis |
-| `pnpm db:generate` | Generate the Prisma client |
-| `pnpm db:migrate` | Create + apply a dev migration (`prisma migrate dev`) |
-| `pnpm db:migrate:deploy` | Apply pending migrations (`prisma migrate deploy`) |
-| `pnpm db:studio` | Open Prisma Studio |
-| `pnpm db:seed` | Seed a demo organization |
-
-You can target a single workspace with `pnpm --filter <name> <script>`, e.g.
-`pnpm --filter @ovozai/api dev`.
-
-## Monorepo layout
+## 📦 Monorepo layout
 
 ```
 .
 ├── apps/
-│   ├── web/            # Next.js 16 frontend (landing + backend status)
-│   ├── api/            # NestJS 12 modular monolith (health module in Phase 1)
-│   ├── voice-worker/   # LiveKit real-time voice agent (Phase 4 scaffold)
-│   └── jobs-worker/    # BullMQ background job processor (scaffold)
+│   ├── web/            # Next.js 16 — landing + full dashboard
+│   ├── api/            # NestJS 12 — auth, tenancy, agents, knowledge, booking, billing, compliance
+│   ├── voice-worker/   # Real-time STT→LLM→TTS orchestrator (WebSocket gateway + LiveKit transport)
+│   └── jobs-worker/    # BullMQ workers — KB ingestion, usage rollups, webhooks, retention
 ├── packages/
 │   ├── database/       # Prisma schema, migrations, generated client, seed
-│   ├── contracts/      # zod schemas + shared types (health, errors, pagination)
-│   ├── ui/             # shadcn/ui-style shared React components (Button, cn)
-│   ├── config/         # shared tsconfig / eslint / prettier presets
-│   └── integrations/   # provider-agnostic STT / LLM / TTS interfaces
-├── infrastructure/     # IaC / ops config (grows in later phases)
-├── docs/               # architecture, database, API, voice pipeline, security, roadmap
-├── docker-compose.yml  # PostgreSQL + Redis (dev)
-├── pnpm-workspace.yaml # workspaces + version catalog
-├── turbo.json          # task pipeline
-└── .env.example        # environment template
+│   ├── contracts/      # zod schemas + shared types (the API contract)
+│   ├── integrations/   # provider interfaces: STT / LLM / TTS / embeddings / calendar / payments
+│   ├── ui/             # shared React components
+│   └── config/         # shared tsconfig / eslint / prettier presets
+├── docs/               # architecture, database, API, voice pipeline, security, compliance, roadmap
+├── render.yaml         # Render Blueprint (api + voice-worker)
+└── pnpm-workspace.yaml # workspaces + version catalog
 ```
 
-## Health checks
+## 🖥️ Running locally
 
-- `GET /api/v1/health` — **liveness**: always `200` while the process is up.
-- `GET /api/v1/health/ready` — **readiness**: checks PostgreSQL + Redis; `200` when both
-  are reachable, `503` with per-dependency detail otherwise. (Powered by `@nestjs/terminus`.)
+**Prerequisites:** Node ≥ 20.9 (`.nvmrc` pins 24), pnpm 12 via Corepack, and PostgreSQL + Redis
+(Docker or native). Building/testing needs no database.
 
-## Documentation
+```bash
+corepack enable                 # enable pnpm
+cp .env.example .env
+pnpm install                    # if prompted about build scripts: pnpm approve-builds --all
+pnpm docker:up                  # PostgreSQL + Redis (or bring your own)
+pnpm db:generate
+pnpm db:migrate:deploy
+pnpm db:seed                    # demo org + owner + ACTIVE Uzbek agent + FAQ knowledge base
+pnpm dev                        # web + api + workers in watch mode
+```
+
+Open **http://localhost:3000** (web) and **http://localhost:3001/api/v1/health** (API liveness).
+For the real Uzbek voice, set the `VOICE_*` provider env (see [`docs/VOICE_TESTING.md`](docs/VOICE_TESTING.md)).
+
+## ☁️ Deployment
+
+The live demo runs entirely on free tiers:
+
+- **Web** → Vercel (Next.js, root `apps/web`).
+- **API + voice-worker** → Render (two web services, defined in [`render.yaml`](render.yaml)).
+- **PostgreSQL** → Neon.
+
+The Render Blueprint auto-deploys on push to `main`; secrets (DB URL, provider keys) live in the
+Render dashboard, never in the repo. Full write-up: [`docs/DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md).
+
+## 🧪 Scripts
+
+| Command | What it does |
+| --- | --- |
+| `pnpm dev` | Run all apps in watch mode |
+| `pnpm build` · `pnpm typecheck` · `pnpm lint` · `pnpm test` | Build / typecheck / lint / unit-test the monorepo |
+| `pnpm --filter @ovozai/api test:e2e` | API e2e (boots the app, no DB needed) |
+| `pnpm db:migrate:deploy` · `pnpm db:seed` · `pnpm db:studio` | Apply migrations · seed demo data · open Prisma Studio |
+
+## 📚 Documentation
 
 | Doc | Contents |
 | --- | --- |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, components, ADRs, deployment |
-| [`docs/DATABASE.md`](docs/DATABASE.md) | Data model, multi-tenancy, migrations, PII |
-| [`docs/API.md`](docs/API.md) | REST conventions, auth, errors, endpoint catalog |
-| [`docs/VOICE_PIPELINE.md`](docs/VOICE_PIPELINE.md) | Real-time call flow, providers, latency |
-| [`docs/SECURITY.md`](docs/SECURITY.md) | AuthN/Z, tenant isolation, Uzbekistan data residency |
-| [`docs/COMPLIANCE.md`](docs/COMPLIANCE.md) | Phase 7: RLS, retention/erasure, observability, residency, load, SOC2 controls |
-| [`docs/ROADMAP.md`](docs/ROADMAP.md) | Phased delivery plan |
+| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | System design, components, ADRs |
+| [`VOICE_PIPELINE.md`](docs/VOICE_PIPELINE.md) | Real-time call flow, providers, latency |
+| [`DATABASE.md`](docs/DATABASE.md) | Data model, multi-tenancy, migrations, PII |
+| [`API.md`](docs/API.md) | REST conventions, auth, errors, endpoints |
+| [`SECURITY.md`](docs/SECURITY.md) · [`COMPLIANCE.md`](docs/COMPLIANCE.md) | AuthN/Z, tenant isolation, RLS, retention, residency |
+| [`DEPLOYMENT_GUIDE.md`](docs/DEPLOYMENT_GUIDE.md) · [`ROADMAP.md`](docs/ROADMAP.md) | Deploying the stack · phased delivery plan |
 
-## Troubleshooting
+---
 
-- **`pnpm: command not found`** — run `corepack enable`. If Corepack cannot symlink into a
-  system directory, enable it into a user directory and add it to `PATH`:
-  `corepack enable --install-directory "$HOME/.local/bin" pnpm`.
-- **`ERR_PNPM_IGNORED_BUILDS` during install** — pnpm gates dependency build scripts. Run
-  `pnpm approve-builds --all` (the approved list is stored in `pnpm-workspace.yaml`).
-- **Readiness returns 503** — PostgreSQL and/or Redis are not running. Start them with
-  `pnpm docker:up`. The API intentionally boots and serves liveness even when they are down.
-- **Prisma client missing** — run `pnpm db:generate` (the generated client is git-ignored).
+<p align="center">
+  Built by <a href="https://github.com/jaloliddinrakhmatov">Jaloliddin Rakhmatov</a> ·
+  a portfolio project — all rights reserved.
+</p>
